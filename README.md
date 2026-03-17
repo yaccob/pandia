@@ -1,47 +1,84 @@
 # pandia
 
-Docker-based Markdown-to-PDF/HTML converter with built-in support for diagrams and LaTeX math.
+Markdown-to-PDF/HTML converter with built-in support for diagrams and LaTeX math.
 All diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zoom level.
 
 ## Supported Features
 
-| Feature    | Code Block Syntax   | Rendering Method         |
-|------------|---------------------|--------------------------|
-| PlantUML   | `` ```plantuml ``   | SVG → PDF via rsvg       |
-| Graphviz   | `` ```graphviz ``   | Direct PDF / SVG via dot |
-| Mermaid    | `` ```mermaid ``    | Direct PDF / SVG via mmdc|
-| Ditaa      | `` ```ditaa ``      | PNG via PlantUML (raster)|
-| LaTeX Math | `$...$` / `$$...$$` | Pandoc native            |
+| Feature    | Code Block Syntax   | Output Format          |
+|------------|---------------------|------------------------|
+| PlantUML   | `` ```plantuml ``   | Vector (PDF/SVG)       |
+| Graphviz   | `` ```graphviz ``   | Vector (PDF/SVG)       |
+| Mermaid    | `` ```mermaid ``    | Vector (PDF/SVG)       |
+| Ditaa      | `` ```ditaa ``      | Raster (PNG)           |
+| LaTeX Math | `$...$` / `$$...$$` | Native (Pandoc)        |
 
-## Quick Start
+## Installation
+
+### macOS / Linux (Homebrew)
 
 ```bash
-# Generate PDF (default)
-docker run --rm -v "$PWD:/data" yaccob/pandia myfile.md
+brew install yaccob/tap/pandia
+```
 
-# Generate HTML
-docker run --rm -v "$PWD:/data" yaccob/pandia --html myfile.md
+This installs `pandia` and all required tools (Pandoc, PlantUML, Graphviz, Mermaid CLI, librsvg).
 
-# Generate both
+> **Note:** PDF output requires a LaTeX distribution. Install with `brew install --cask basictex`.
+
+### Manual Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yaccob/pandia/v1.0.0/install.sh | sh
+```
+
+Installs the `pandia` script to `~/.local/bin`. You still need either:
+- **Local tools:** `pandoc`, `plantuml`, `dot`, `mmdc`, `rsvg-convert`, `pdflatex`
+- **Or just Docker/Podman** — pandia uses it as automatic fallback
+
+### Docker Only
+
+```bash
+docker pull yaccob/pandia
 docker run --rm -v "$PWD:/data" yaccob/pandia --all myfile.md
 ```
 
-## Options
+## Usage
 
 ```
-Usage: docker run --rm -v "$PWD:/data" yaccob/pandia [OPTIONS] <input.md>
+pandia [OPTIONS] <input.md>
 
 Options:
-  --pdf              Generate PDF output (default if no format specified)
+  --pdf              Generate PDF output (default)
   --html             Generate HTML output
   --all              Generate both PDF and HTML
+  --watch            Watch for changes and regenerate automatically
   -o, --output NAME  Base name for output files (default: derived from input)
+  --docker           Force Docker mode (skip local tools)
+  --local            Force local mode (fail if tools missing)
+  -v, --version      Show version
   -h, --help         Show this help
 ```
 
-## Example
+### Examples
 
-Create a file `demo.md`:
+```bash
+# Generate PDF (default)
+pandia myfile.md
+
+# Generate both PDF and HTML
+pandia --all myfile.md
+
+# Watch mode — regenerate on every save
+pandia --watch --all myfile.md
+
+# Custom output name
+pandia --all -o report myfile.md
+
+# Force Docker even if local tools are available
+pandia --docker --all myfile.md
+```
+
+## Example Document
 
 ````markdown
 ---
@@ -77,29 +114,16 @@ digraph { rankdir=LR; A -> B -> C; }
 $$E = mc^2$$
 ````
 
-Then run:
-
-```bash
-docker run --rm -v "$PWD:/data" yaccob/pandia --all demo.md
-```
-
-## Local Development (without Docker)
-
-Requirements: `pandoc`, `pdflatex`, `plantuml`, `dot` (Graphviz), `mmdc` (Mermaid CLI), `rsvg-convert`.
-
-```bash
-make all      # build example.pdf + example.html
-make pdf      # PDF only
-make html     # HTML only
-make clean    # remove generated files
-```
-
 ## How It Works
 
-pandia is a [Pandoc](https://pandoc.org/) wrapper with a custom Lua filter that intercepts
-`plantuml`, `graphviz`, `mermaid`, and `ditaa` code blocks, renders them to images via their
-respective CLI tools, and passes the results back to Pandoc for final PDF or HTML assembly.
-LaTeX math is handled natively by Pandoc.
+pandia wraps [Pandoc](https://pandoc.org/) with a custom Lua filter that intercepts
+`plantuml`, `graphviz`, `mermaid`, and `ditaa` code blocks, renders them via their
+respective CLI tools, and passes the results back to Pandoc for PDF or HTML output.
+
+- **Local mode:** Calls tools directly — fast, no overhead
+- **Docker mode:** Runs everything in a self-contained container — no setup required
+
+The CLI automatically detects which mode to use: local tools if available, Docker as fallback.
 
 ## License
 

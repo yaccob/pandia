@@ -1,0 +1,232 @@
+#!/bin/sh
+set -e
+
+VERSION="1.0.0"
+IMAGE="yaccob/pandia"
+FILTER_NAME="diagram-filter.lua"
+
+# --- Detect filter location ---
+find_filter() {
+  # Check common install locations
+  for dir in \
+    "$(dirname "$0")/../share/pandia" \
+    "$(dirname "$0")/.." \
+    "/usr/local/share/pandia" \
+    "/opt/homebrew/share/pandia" \
+    "$HOME/.local/share/pandia"
+  do
+    if [ -f "$dir/$FILTER_NAME" ]; then
+      echo "$dir/$FILTER_NAME"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# --- Check if local tools are available ---
+has_local_tools() {
+  command -v pandoc   >/dev/null 2>&1 && \
+  command -v plantuml >/dev/null 2>&1 && \
+  command -v dot      >/dev/null 2>&1 && \
+  command -v mmdc     >/dev/null 2>&1 && \
+  find_filter >/dev/null 2>&1
+}
+
+has_docker() {
+  command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1
+}
+
+get_docker() {
+  if command -v docker >/dev/null 2>&1; then
+    echo "docker"
+  elif command -v podman >/dev/null 2>&1; then
+    echo "podman"
+  fi
+}
+
+# --- Usage ---
+usage() {
+  cat <<EOF
+pandia v${VERSION} — Markdown to PDF/HTML with diagrams and LaTeX math
+
+Usage: pandia [OPTIONS] <input.md>
+
+Options:
+  --pdf              Generate PDF output (default if no format specified)
+  --html             Generate HTML output
+  --all              Generate both PDF and HTML
+  --watch            Watch for changes and regenerate automatically
+  -o, --output NAME  Base name for output files (default: derived from input)
+  --docker           Force Docker mode (skip local tools)
+  --local            Force local mode (fail if tools missing)
+  -v, --version      Show version
+  -h, --help         Show this help
+
+Supported diagram types: plantuml, graphviz/dot, mermaid, ditaa
+LaTeX math: \$...\$ (inline) and \$\$...\$\$ (block)
+EOF
+  exit 0
+}
+
+# --- Argument parsing ---
+FORMAT_PDF=false
+FORMAT_HTML=false
+WATCH=false
+OUTPUT_BASE=""
+INPUT=""
+FORCE_MODE=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --pdf)        FORMAT_PDF=true; shift ;;
+    --html)       FORMAT_HTML=true; shift ;;
+    --all)        FORMAT_PDF=true; FORMAT_HTML=true; shift ;;
+    --watch)      WATCH=true; shift ;;
+    -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
+    --docker)     FORCE_MODE="docker"; shift ;;
+    --local)      FORCE_MODE="local"; shift ;;
+    -v|--version) echo "pandia v${VERSION}"; exit 0 ;;
+    -h|--help)    usage ;;
+    -*)           echo "Unknown option: $1" >&2; usage ;;
+    *)            INPUT="$1"; shift ;;
+  esac
+done
+
+if [ -z "$INPUT" ]; then
+  echo "Error: No input file specified." >&2
+  echo "Run 'pandia --help' for usage." >&2
+  exit 1
+fi
+
+if [ ! -f "$INPUT" ]; then
+  echo "Error: File '$INPUT' not found." >&2
+  exit 1
+fi
+
+# Default to PDF
+if [ "$FORMAT_PDF" = false ] && [ "$FORMAT_HTML" = false ]; then
+  FORMAT_PDF=true
+fi
+
+# Derive output base name
+if [ -z "$OUTPUT_BASE" ]; then
+  OUTPUT_BASE="$(basename "$INPUT" .md)"
+fi
+
+# --- Determine mode ---
+MODE=""
+if [ "$FORCE_MODE" = "docker" ]; then
+  if ! has_docker; then
+    echo "Error: --docker specified but neither docker nor podman found." >&2
+    exit 1
+  fi
+  MODE="docker"
+elif [ "$FORCE_MODE" = "local" ]; then
+  if ! has_local_tools; then
+    echo "Error: --local specified but required tools are missing." >&2
+    echo "Required: pandoc, plantuml, dot (graphviz), mmdc (mermaid-cli)" >&2
+    exit 1
+  fi
+  MODE="local"
+elif has_local_tools; then
+  MODE="local"
+elif has_docker; then
+  MODE="docker"
+else
+  echo "Error: Neither local tools nor Docker/Podman found." >&2
+  echo "" >&2
+  echo "Install locally (macOS):  brew install yaccob/tap/pandia" >&2
+  echo "Or use Docker:            docker pull ${IMAGE}" >&2
+  exit 1
+fi
+
+# --- Build format flags ---
+build_format_flags() {
+  flags=""
+  if [ "$FORMAT_PDF" = true ] && [ "$FORMAT_HTML" = true ]; then
+    flags="--all"
+  elif [ "$FORMAT_PDF" = true ]; then
+    flags="--pdf"
+  elif [ "$FORMAT_HTML" = true ]; then
+    flags="--html"
+  fi
+  if [ -n "$OUTPUT_BASE" ]; then
+    flags="$flags -o $OUTPUT_BASE"
+  fi
+  echo "$flags"
+}
+
+# --- Local execution ---
+run_local() {
+  FILTER="$(find_filter)"
+  PANDOC_COMMON="--lua-filter=$FILTER --from=gfm+tex_math_dollars"
+  INPUT_ABS="$(cd "$(dirname "$INPUT")" && pwd)/$(basename "$INPUT")"
+
+  if [ "$FORMAT_PDF" = true ]; then
+    echo "Generating ${OUTPUT_BASE}.pdf ..."
+    pandoc $PANDOC_COMMON \
+      --to=pdf \
+      --pdf-engine=pdflatex \
+      -V geometry:margin=2.5cm \
+      --standalone \
+      -o "${OUTPUT_BASE}.pdf" "$INPUT"
+    echo "  -> ${OUTPUT_BASE}.pdf"
+  fi
+
+  if [ "$FORMAT_HTML" = true ]; then
+    echo "Generating ${OUTPUT_BASE}.html ..."
+    pandoc $PANDOC_COMMON \
+      --to=html5 \
+      --standalone \
+      --mathjax \
+      -o "${OUTPUT_BASE}.html" "$INPUT"
+    echo "  -> ${OUTPUT_BASE}.html"
+  fi
+}
+
+# --- Docker execution ---
+run_docker() {
+  DOCKER="$(get_docker)"
+  INPUT_DIR="$(cd "$(dirname "$INPUT")" && pwd)"
+  INPUT_FILE="$(basename "$INPUT")"
+  FLAGS="$(build_format_flags)"
+
+  $DOCKER run --rm -v "${INPUT_DIR}:/data" "${IMAGE}:${VERSION}" $FLAGS "$INPUT_FILE"
+}
+
+# --- Watch mode ---
+run_watch() {
+  echo "Watching '$INPUT' for changes (Ctrl+C to stop) ..."
+  echo "Mode: $MODE"
+  echo ""
+
+  # Initial build
+  run_once
+
+  LAST_HASH=""
+  while true; do
+    HASH="$(md5sum "$INPUT" 2>/dev/null || md5 -q "$INPUT" 2>/dev/null || stat -f%m "$INPUT" 2>/dev/null || stat -c%Y "$INPUT" 2>/dev/null)"
+    if [ "$HASH" != "$LAST_HASH" ] && [ -n "$LAST_HASH" ]; then
+      echo ""
+      echo "--- Change detected at $(date +%H:%M:%S) ---"
+      run_once
+    fi
+    LAST_HASH="$HASH"
+    sleep 1
+  done
+}
+
+# --- Dispatch ---
+run_once() {
+  if [ "$MODE" = "local" ]; then
+    run_local
+  else
+    run_docker
+  fi
+}
+
+if [ "$WATCH" = true ]; then
+  run_watch
+else
+  run_once
+fi

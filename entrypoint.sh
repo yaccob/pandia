@@ -12,13 +12,14 @@ Options:
   --pdf              Generate PDF output (default if no format specified)
   --html             Generate HTML output
   --all              Generate both PDF and HTML
+  --watch            Watch for changes and regenerate automatically
   -o, --output NAME  Base name for output files (default: derived from input)
   -h, --help         Show this help
 
 Examples:
   docker run --rm -v "$PWD:/data" yaccob/pandia example.md
-  docker run --rm -v "$PWD:/data" yaccob/pandia --html example.md
-  docker run --rm -v "$PWD:/data" yaccob/pandia --all -o report example.md
+  docker run --rm -v "$PWD:/data" yaccob/pandia --all example.md
+  docker run --rm -v "$PWD:/data" yaccob/pandia --watch --all example.md
 EOF
   exit 0
 }
@@ -26,6 +27,7 @@ EOF
 # Defaults
 FORMAT_PDF=false
 FORMAT_HTML=false
+WATCH=false
 OUTPUT_BASE=""
 INPUT=""
 
@@ -35,6 +37,7 @@ while [ $# -gt 0 ]; do
     --pdf)       FORMAT_PDF=true; shift ;;
     --html)      FORMAT_HTML=true; shift ;;
     --all)       FORMAT_PDF=true; FORMAT_HTML=true; shift ;;
+    --watch)     WATCH=true; shift ;;
     -o|--output) OUTPUT_BASE="$2"; shift 2 ;;
     -h|--help)   usage ;;
     -*)          echo "Unknown option: $1" >&2; usage ;;
@@ -62,23 +65,43 @@ if [ -z "$OUTPUT_BASE" ]; then
   OUTPUT_BASE="$(basename "$INPUT" .md)"
 fi
 
-if [ "$FORMAT_PDF" = true ]; then
-  echo "Generating ${OUTPUT_BASE}.pdf ..."
-  pandoc $PANDOC_COMMON \
-    --to=pdf \
-    --pdf-engine=pdflatex \
-    -V geometry:margin=2.5cm \
-    --standalone \
-    -o "${OUTPUT_BASE}.pdf" "$INPUT"
-  echo "  -> ${OUTPUT_BASE}.pdf"
-fi
+generate() {
+  if [ "$FORMAT_PDF" = true ]; then
+    echo "Generating ${OUTPUT_BASE}.pdf ..."
+    pandoc $PANDOC_COMMON \
+      --to=pdf \
+      --pdf-engine=pdflatex \
+      -V geometry:margin=2.5cm \
+      --standalone \
+      -o "${OUTPUT_BASE}.pdf" "$INPUT"
+    echo "  -> ${OUTPUT_BASE}.pdf"
+  fi
 
-if [ "$FORMAT_HTML" = true ]; then
-  echo "Generating ${OUTPUT_BASE}.html ..."
-  pandoc $PANDOC_COMMON \
-    --to=html5 \
-    --standalone \
-    --mathjax \
-    -o "${OUTPUT_BASE}.html" "$INPUT"
-  echo "  -> ${OUTPUT_BASE}.html"
+  if [ "$FORMAT_HTML" = true ]; then
+    echo "Generating ${OUTPUT_BASE}.html ..."
+    pandoc $PANDOC_COMMON \
+      --to=html5 \
+      --standalone \
+      --mathjax \
+      -o "${OUTPUT_BASE}.html" "$INPUT"
+    echo "  -> ${OUTPUT_BASE}.html"
+  fi
+}
+
+if [ "$WATCH" = true ]; then
+  echo "Watching '$INPUT' for changes (Ctrl+C to stop) ..."
+  generate
+  LAST_HASH=""
+  while true; do
+    HASH="$(md5sum "$INPUT" 2>/dev/null || stat -c%Y "$INPUT" 2>/dev/null)"
+    if [ "$HASH" != "$LAST_HASH" ] && [ -n "$LAST_HASH" ]; then
+      echo ""
+      echo "--- Change detected at $(date +%H:%M:%S) ---"
+      generate
+    fi
+    LAST_HASH="$HASH"
+    sleep 1
+  done
+else
+  generate
 fi
