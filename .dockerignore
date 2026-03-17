@@ -1,0 +1,10 @@
+img/
+*.pdf
+*.html
+*.md
+!example.md
+LICENSE
+README.md
+Makefile
+.git/
+.gitignore
