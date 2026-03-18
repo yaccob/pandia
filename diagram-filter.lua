@@ -5,10 +5,8 @@
 -- For PDF output: vector graphics (PDF) where possible, PNG only for ditaa
 -- For HTML output: SVG where possible, PNG for ditaa and tikz
 --
--- Set PANDIA_PARALLEL=1 to render diagrams in parallel
---
--- Batching: PlantUML, ditaa, and mermaid diagrams are batched to avoid
--- repeated JVM/Chromium startup overhead.
+-- All diagram tool groups run concurrently. PlantUML, ditaa, and mermaid
+-- diagrams are batched to avoid repeated JVM/Chromium startup overhead.
 -- Set MERMAID_SERVER=http://host:port to use a persistent render server
 -- instead of mmdc batch mode (used in container for watch mode).
 
@@ -16,7 +14,6 @@ local filecounter = 0
 local imgdir = "img"
 local is_html = false
 local is_pdf = false
-local parallel = os.getenv("PANDIA_PARALLEL") == "1"
 
 -- Optional puppeteer config for mermaid (needed in containers)
 local mmdc_puppeteer = os.getenv("MMDC_PUPPETEER_CONFIG")
@@ -204,77 +201,22 @@ local function pass1_CodeBlock(block)
 end
 
 ------------------------------------------------------------------------
--- Mermaid batch rendering
+-- Mermaid rendering (server mode)
 ------------------------------------------------------------------------
 
 local function execute_mermaid_server(mermaid_jobs)
-  -- Container mode: send render requests to the persistent mermaid server
-  if parallel then
-    local parts = {}
-    for _, job in ipairs(mermaid_jobs) do
-      parts[#parts + 1] = "(wget -q -O /dev/null '"
-        .. mermaid_server .. "/render?in=" .. job.infile
-        .. "&out=" .. job.outfile .. "&fmt=" .. job.fmt .. "') &"
-    end
-    parts[#parts + 1] = "wait"
-    os.execute(table.concat(parts, " "))
-  else
-    for _, job in ipairs(mermaid_jobs) do
-      os.execute("wget -q -O /dev/null '"
-        .. mermaid_server .. "/render?in=" .. job.infile
-        .. "&out=" .. job.outfile .. "&fmt=" .. job.fmt .. "'")
-    end
-  end
-end
-
-local function execute_mermaid_batch(mermaid_jobs)
-  -- Local/container fallback: batch all mermaid diagrams via mmdc markdown mode
-  -- (one Chromium launch for all diagrams)
-  local batchfile = imgdir .. "/mermaid-batch.md"
-  local outbase = imgdir .. "/mermaid-out"
-  local fmt = mermaid_jobs[1].fmt
-
-  local f = io.open(batchfile, "w")
+  local parts = {}
   for _, job in ipairs(mermaid_jobs) do
-    f:write("```mermaid\n" .. job.code .. "\n```\n\n")
+    parts[#parts + 1] = "(wget -q -O /dev/null '"
+      .. mermaid_server .. "/render?in=" .. job.infile
+      .. "&out=" .. job.outfile .. "&fmt=" .. job.fmt .. "') &"
   end
-  f:close()
-
-  os.execute("mmdc -i " .. batchfile .. " -o " .. outbase .. ".md -e " .. fmt
-    .. mmdc_extra .. " --quiet 2>/dev/null")
-
-  -- Rename mmdc numbered outputs to expected job outfiles
-  for i, job in ipairs(mermaid_jobs) do
-    local mmdc_out = outbase .. "-" .. i .. "." .. fmt
-    os.rename(mmdc_out, job.outfile)
-  end
-
-  -- Cleanup batch files
-  os.remove(batchfile)
-  os.remove(outbase .. ".md")
-end
-
-local function execute_mermaid(mermaid_jobs)
-  if #mermaid_jobs == 0 then return end
-
-  -- Write input files for server mode (batch mode uses inline code)
-  if mermaid_server then
-    for _, job in ipairs(mermaid_jobs) do
-      local infile = job.outfile:gsub("%.[^.]+$", ".mmd")
-      local f = io.open(infile, "w")
-      f:write(job.code)
-      f:close()
-      job.infile = infile
-      job.cleanup = {infile}
-    end
-    execute_mermaid_server(mermaid_jobs)
-  else
-    execute_mermaid_batch(mermaid_jobs)
-  end
+  parts[#parts + 1] = "wait"
+  os.execute(table.concat(parts, " "))
 end
 
 ------------------------------------------------------------------------
--- Execution: batch plantuml/ditaa/mermaid, run others individually
+-- Execution: all tool groups run concurrently, batched where possible
 ------------------------------------------------------------------------
 
 local jobs_done = false
@@ -302,88 +244,74 @@ local function execute_all()
     end
   end
 
-  if parallel then
-    -- All tool groups run concurrently
-    local parts = {}
+  -- Build parallel shell command
+  local parts = {}
 
-    -- PlantUML batch as one background job (one JVM)
-    if #puml_files > 0 then
-      local puml_cmd = "plantuml -tsvg " .. table.concat(puml_files, " ")
-      if is_pdf then
-        for _, job in ipairs(puml_jobs) do
-          puml_cmd = puml_cmd
-            .. " && rsvg-convert -f pdf -o " .. job.outfile .. " " .. job.svgfile
-        end
+  -- PlantUML batch as one background job (one JVM)
+  if #puml_files > 0 then
+    local puml_cmd = "plantuml -tsvg " .. table.concat(puml_files, " ")
+    if is_pdf then
+      for _, job in ipairs(puml_jobs) do
+        puml_cmd = puml_cmd
+          .. " && rsvg-convert -f pdf -o " .. job.outfile .. " " .. job.svgfile
       end
-      table.insert(parts, "(" .. puml_cmd .. ") &")
     end
+    table.insert(parts, "(" .. puml_cmd .. ") &")
+  end
 
-    -- Ditaa batch as one background job (one JVM)
-    if #ditaa_files > 0 then
-      table.insert(parts, "(plantuml -tpng " .. table.concat(ditaa_files, " ") .. ") &")
+  -- Ditaa batch as one background job (one JVM)
+  if #ditaa_files > 0 then
+    table.insert(parts, "(plantuml -tpng " .. table.concat(ditaa_files, " ") .. ") &")
+  end
+
+  -- Each other tool (graphviz, tikz) as its own background job
+  for _, cmd in ipairs(other_cmds) do
+    table.insert(parts, "(" .. cmd .. ") &")
+  end
+
+  -- Mermaid batch via mmdc (one Chromium, as background job)
+  if #mermaid_jobs > 0 and not mermaid_server then
+    local batchfile = imgdir .. "/mermaid-batch.md"
+    local outbase = imgdir .. "/mermaid-out"
+    local fmt = mermaid_jobs[1].fmt
+    local f = io.open(batchfile, "w")
+    for _, job in ipairs(mermaid_jobs) do
+      f:write("```mermaid\n" .. job.code .. "\n```\n\n")
     end
+    f:close()
+    local mmdc_cmd = "mmdc -i " .. batchfile .. " -o " .. outbase .. ".md -e " .. fmt
+      .. mmdc_extra .. " --quiet 2>/dev/null"
+    table.insert(parts, "(" .. mmdc_cmd .. ") &")
+  end
 
-    -- Each other tool (graphviz, tikz) as its own background job
-    for _, cmd in ipairs(other_cmds) do
-      table.insert(parts, "(" .. cmd .. ") &")
-    end
+  -- Launch all background jobs and wait
+  if #parts > 0 then
+    table.insert(parts, "wait")
+    os.execute(table.concat(parts, " "))
+  end
 
-    -- Mermaid: batch or server (runs as one background job)
-    if #mermaid_jobs > 0 and not mermaid_server then
-      -- mmdc batch in background (one Chromium)
-      local batchfile = imgdir .. "/mermaid-batch.md"
-      local outbase = imgdir .. "/mermaid-out"
-      local fmt = mermaid_jobs[1].fmt
-      local f = io.open(batchfile, "w")
-      for _, job in ipairs(mermaid_jobs) do
-        f:write("```mermaid\n" .. job.code .. "\n```\n\n")
-      end
+  -- Mermaid server mode: send requests concurrently
+  if #mermaid_jobs > 0 and mermaid_server then
+    for _, job in ipairs(mermaid_jobs) do
+      local infile = job.outfile:gsub("%.[^.]+$", ".mmd")
+      local f = io.open(infile, "w")
+      f:write(job.code)
       f:close()
-      local mmdc_cmd = "mmdc -i " .. batchfile .. " -o " .. outbase .. ".md -e " .. fmt
-        .. mmdc_extra .. " --quiet 2>/dev/null"
-      table.insert(parts, "(" .. mmdc_cmd .. ") &")
+      job.infile = infile
+      job.cleanup = {infile}
     end
+    execute_mermaid_server(mermaid_jobs)
+  end
 
-    if #parts > 0 then
-      table.insert(parts, "wait")
-      os.execute(table.concat(parts, " "))
+  -- Mermaid batch: rename outputs after wait
+  if #mermaid_jobs > 0 and not mermaid_server then
+    local outbase = imgdir .. "/mermaid-out"
+    local fmt = mermaid_jobs[1].fmt
+    for i, job in ipairs(mermaid_jobs) do
+      os.rename(outbase .. "-" .. i .. "." .. fmt, job.outfile)
     end
-
-    -- Mermaid server mode: send requests (potentially parallel)
-    if #mermaid_jobs > 0 and mermaid_server then
-      execute_mermaid(mermaid_jobs)
-    end
-
-    -- Mermaid batch: rename outputs after wait
-    if #mermaid_jobs > 0 and not mermaid_server then
-      local outbase = imgdir .. "/mermaid-out"
-      local fmt = mermaid_jobs[1].fmt
-      for i, job in ipairs(mermaid_jobs) do
-        os.rename(outbase .. "-" .. i .. "." .. fmt, job.outfile)
-      end
-      os.remove(imgdir .. "/mermaid-batch.md")
-      os.remove(outbase .. ".md")
-    end
-  else
-    -- Sequential mode: still batch all tool groups
-    if #puml_files > 0 then
-      os.execute("plantuml -tsvg " .. table.concat(puml_files, " "))
-      if is_pdf then
-        for _, job in ipairs(puml_jobs) do
-          os.execute("rsvg-convert -f pdf -o " .. job.outfile .. " " .. job.svgfile)
-        end
-      end
-    end
-
-    if #ditaa_files > 0 then
-      os.execute("plantuml -tpng " .. table.concat(ditaa_files, " "))
-    end
-
-    execute_mermaid(mermaid_jobs)
-
-    for _, cmd in ipairs(other_cmds) do
-      os.execute(cmd)
-    end
+    os.remove(imgdir .. "/mermaid-batch.md")
+    os.remove(outbase .. ".md")
   end
 
   -- Clean up temp files

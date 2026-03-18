@@ -10,7 +10,6 @@ Usage: docker run --rm -v "$PWD:/data" yaccob/pandia [OPTIONS] <input.md>
 
 Options:
   -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
-  --parallel         Render diagrams in parallel (faster for multiple diagrams)
   --watch            Watch for changes and regenerate automatically
   --serve [PORT]     Start HTTP server for rendering (default port: 3300)
   -o, --output NAME  Base name for output files (default: derived from input)
@@ -29,7 +28,6 @@ EOF
 # Defaults
 FORMAT_PDF=false
 FORMAT_HTML=false
-PARALLEL=false
 WATCH=false
 SERVE=false
 SERVE_PORT="3300"
@@ -47,7 +45,6 @@ while [ $# -gt 0 ]; do
         *)    echo "Error: Unknown format '$2'. Use 'pdf' or 'html'." >&2; exit 1 ;;
       esac
       shift 2 ;;
-    --parallel)   PARALLEL=true; shift ;;
     --watch)      WATCH=true; shift ;;
     --serve)      SERVE=true
                   if [ -n "$2" ] && [ "${2#-}" = "$2" ] 2>/dev/null; then
@@ -82,11 +79,6 @@ fi
 # Default to HTML if no format specified
 if [ "$FORMAT_PDF" = false ] && [ "$FORMAT_HTML" = false ]; then
   FORMAT_HTML=true
-fi
-
-# Enable parallel rendering if requested
-if [ "$PARALLEL" = true ]; then
-  export PANDIA_PARALLEL=1
 fi
 
 # Start mermaid render server (keeps Chromium alive across rebuilds)
