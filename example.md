@@ -154,27 +154,21 @@ The quadratic formula:
 
 $$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
 
-Solving quadratic equations (just for demonstrating complex formatting):
+Deriving it by completing the square:
 
 $$
-  \begin{alignedat}{2}
-    ax^2 + bx + c &= 0 &\quad|\; & - ax^2 \\
-    bx + c &= - ax^2 &|\; & : a \\
-    \frac{b}{a} x + \frac{c}{a} &= - x^2 &|\; & + \left(\frac{b}{2a}\right)^2 \\
-    \frac{b}{a} x + \left(\frac{b}{2a}\right)^2 + \frac{c}{a} &= - x^2 + \left(\frac{b}{2a}\right)^2 &|\; & \\
-    \left(x + \frac{b}{2a}\right)^2 &= -\frac{c}{a} + \left(\frac{b}{2a}\right)^2 &|\; & \sqrt{\cdot} \\
-    x + \frac{b}{2a} &= \pm\sqrt{-\frac{c}{a} + \left(\frac{b}{2a}\right)^2} &|\; & -\frac{b}{2a} \\
-    x &= -\frac{b}{2a} \pm\sqrt{-\frac{c}{a} + \left(\frac{b}{2a}\right)^2}
-  \end{alignedat}
+\begin{alignedat}{2}
+  ax^2 + bx + c &= 0           &\quad&| \div a \\
+  x^2 + \frac{b}{a}x &= -\frac{c}{a} &&| + \left(\frac{b}{2a}\right)^2 \\
+  \left(x + \frac{b}{2a}\right)^2 &= \frac{b^2 - 4ac}{4a^2} &&| \sqrt{\phantom{x}} \\
+  x + \frac{b}{2a} &= \pm\frac{\sqrt{b^2 - 4ac}}{2a} &&| - \frac{b}{2a} \\
+  x &= \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+\end{alignedat}
 $$
 
 The Gaussian integral:
 
-$$
-  \begin{aligned}
-    x &= \frac{-b \pm \sqrt{b^2 - 4ac}}{2a} \\
-  \end{aligned}
-$$
+$$\int_{-\infty}^{\infty} e^{-x^2}\, dx = \sqrt{\pi}$$
 
 The Collatz conjecture considers the sequence:
 
