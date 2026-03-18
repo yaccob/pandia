@@ -5,7 +5,10 @@
 -- For PDF output: vector graphics (PDF) where possible, PNG only for ditaa
 -- For HTML output: SVG where possible, PNG for ditaa and tikz
 --
--- Set PANDIA_PARALLEL=1 to render diagrams in parallel (two-pass filter)
+-- Set PANDIA_PARALLEL=1 to render diagrams in parallel
+--
+-- PlantUML and ditaa diagrams are batched into single JVM calls regardless
+-- of parallel mode, avoiding repeated JVM startup overhead.
 
 local filecounter = 0
 local imgdir = "img"
@@ -27,7 +30,7 @@ local function detect_format()
 end
 
 ------------------------------------------------------------------------
--- Prepare functions: write input files, return (outfile, cmd, cleanup)
+-- Prepare functions: write input files, return job metadata
 ------------------------------------------------------------------------
 
 local function prepare_plantuml(code)
@@ -40,15 +43,21 @@ local function prepare_plantuml(code)
   f:close()
 
   if is_html then
-    local outfile = basename .. ".svg"
-    return outfile, "plantuml -tsvg " .. infile, {infile}
+    return {
+      tool = "plantuml",
+      infile = infile,
+      outfile = basename .. ".svg",
+      cleanup = {infile},
+    }
   else
     local svgfile = basename .. ".svg"
-    local outfile = basename .. ".pdf"
-    return outfile,
-      "plantuml -tsvg " .. infile
-        .. " && rsvg-convert -f pdf -o " .. outfile .. " " .. svgfile,
-      {infile, svgfile}
+    return {
+      tool = "plantuml",
+      infile = infile,
+      outfile = basename .. ".pdf",
+      svgfile = svgfile,
+      cleanup = {infile, svgfile},
+    }
   end
 end
 
@@ -64,10 +73,20 @@ local function prepare_graphviz(code, engine)
 
   if is_html then
     local outfile = basename .. ".svg"
-    return outfile, engine .. " -Tsvg -o " .. outfile .. " " .. infile, {infile}
+    return {
+      tool = "graphviz",
+      outfile = outfile,
+      cmd = engine .. " -Tsvg -o " .. outfile .. " " .. infile,
+      cleanup = {infile},
+    }
   else
     local outfile = basename .. ".pdf"
-    return outfile, engine .. " -Tpdf -o " .. outfile .. " " .. infile, {infile}
+    return {
+      tool = "graphviz",
+      outfile = outfile,
+      cmd = engine .. " -Tpdf -o " .. outfile .. " " .. infile,
+      cleanup = {infile},
+    }
   end
 end
 
@@ -82,14 +101,20 @@ local function prepare_mermaid(code)
 
   if is_html then
     local outfile = basename .. ".svg"
-    return outfile,
-      "mmdc -i " .. infile .. " -o " .. outfile .. mmdc_extra .. " --quiet 2>/dev/null",
-      {infile}
+    return {
+      tool = "mermaid",
+      outfile = outfile,
+      cmd = "mmdc -i " .. infile .. " -o " .. outfile .. mmdc_extra .. " --quiet 2>/dev/null",
+      cleanup = {infile},
+    }
   else
     local outfile = basename .. ".pdf"
-    return outfile,
-      "mmdc -i " .. infile .. " -o " .. outfile .. mmdc_extra .. " --quiet 2>/dev/null",
-      {infile}
+    return {
+      tool = "mermaid",
+      outfile = outfile,
+      cmd = "mmdc -i " .. infile .. " -o " .. outfile .. mmdc_extra .. " --quiet 2>/dev/null",
+      cleanup = {infile},
+    }
   end
 end
 
@@ -98,12 +123,17 @@ local function prepare_ditaa(code)
   filecounter = filecounter + 1
   local basename = imgdir .. "/ditaa-" .. filecounter
   local wrapped = "@startditaa\n" .. code .. "\n@endditaa"
-  local outfile = basename .. ".png"
   local infile = basename .. ".puml"
   local f = io.open(infile, "w")
   f:write(wrapped)
   f:close()
-  return outfile, "plantuml -tpng " .. infile, {infile}
+
+  return {
+    tool = "ditaa",
+    infile = infile,
+    outfile = basename .. ".png",
+    cleanup = {infile},
+  }
 end
 
 local function prepare_tikz(code)
@@ -132,92 +162,155 @@ local function prepare_tikz(code)
 
   if is_html then
     local pngfile = basename .. ".png"
-    local cmd = compile
-      .. " && gs -sDEVICE=pngalpha -r300 -dNOPAUSE -dBATCH -dQUIET"
-      .. " -sOutputFile=" .. pngfile .. " " .. pdffile .. " 2>/dev/null"
-    return pngfile, cmd, cleanup
+    return {
+      tool = "tikz",
+      outfile = pngfile,
+      cmd = compile
+        .. " && gs -sDEVICE=pngalpha -r300 -dNOPAUSE -dBATCH -dQUIET"
+        .. " -sOutputFile=" .. pngfile .. " " .. pdffile .. " 2>/dev/null",
+      cleanup = cleanup,
+    }
   else
-    return pdffile, compile, cleanup
+    return {
+      tool = "tikz",
+      outfile = pdffile,
+      cmd = compile,
+      cleanup = cleanup,
+    }
   end
 end
 
-local function get_prepare_fn(lang, attrs)
-  if lang == "plantuml" then
-    return prepare_plantuml
-  elseif lang == "graphviz" or lang == "dot" then
-    return function(code) return prepare_graphviz(code, attrs.engine) end
-  elseif lang == "mermaid" then
-    return prepare_mermaid
-  elseif lang == "ditaa" then
-    return prepare_ditaa
-  elseif lang == "tikz" then
-    return prepare_tikz
-  end
-  return nil
-end
-
 ------------------------------------------------------------------------
--- Sequential mode (default): single-pass filter
-------------------------------------------------------------------------
-
-local function seq_CodeBlock(block)
-  detect_format()
-  local lang = block.classes[1]
-  local caption = block.attributes.caption or ""
-  local prepare = get_prepare_fn(lang, block.attributes)
-  if not prepare then return nil end
-
-  local outfile, cmd, cleanup = prepare(block.text)
-  os.execute(cmd)
-  if cleanup then
-    for _, f in ipairs(cleanup) do os.remove(f) end
-  end
-  return pandoc.Para{pandoc.Image({pandoc.Str(caption)}, outfile)}
-end
-
-------------------------------------------------------------------------
--- Parallel mode: two-pass filter
+-- Pass 1: collect all diagram blocks, write input files
 ------------------------------------------------------------------------
 
 local pending = {}
 
-local function par_pass1_CodeBlock(block)
+local function pass1_CodeBlock(block)
   detect_format()
   local lang = block.classes[1]
   local caption = block.attributes.caption or ""
-  local prepare = get_prepare_fn(lang, block.attributes)
-  if not prepare then return nil end
 
-  local outfile, cmd, cleanup = prepare(block.text)
-  local id = "pandia-job-" .. (#pending + 1)
-  table.insert(pending, {
-    id = id, outfile = outfile, caption = caption, cmd = cmd, cleanup = cleanup
-  })
-  return pandoc.Div({}, pandoc.Attr(id))
+  local job = nil
+  if lang == "plantuml" then
+    job = prepare_plantuml(block.text)
+  elseif lang == "graphviz" or lang == "dot" then
+    job = prepare_graphviz(block.text, block.attributes.engine)
+  elseif lang == "mermaid" then
+    job = prepare_mermaid(block.text)
+  elseif lang == "ditaa" then
+    job = prepare_ditaa(block.text)
+  elseif lang == "tikz" then
+    job = prepare_tikz(block.text)
+  end
+
+  if not job then return nil end
+
+  job.caption = caption
+  job.id = "pandia-job-" .. (#pending + 1)
+  table.insert(pending, job)
+  return pandoc.Div({}, pandoc.Attr(job.id))
 end
+
+------------------------------------------------------------------------
+-- Execution: batch plantuml/ditaa, run others individually or parallel
+------------------------------------------------------------------------
 
 local jobs_done = false
 
-local function ensure_jobs_done()
+local function execute_all()
   if jobs_done or #pending == 0 then return end
-  -- Launch all render commands in parallel within one shell, then wait
-  local parts = {}
+
+  -- Collect plantuml and ditaa files for batching
+  local puml_files = {}
+  local puml_jobs = {}
   for _, job in ipairs(pending) do
-    table.insert(parts, "(" .. job.cmd .. ") &")
+    if job.tool == "plantuml" then
+      table.insert(puml_files, job.infile)
+      table.insert(puml_jobs, job)
+    end
   end
-  table.insert(parts, "wait")
-  os.execute(table.concat(parts, " "))
-  -- Clean up temp input files
+
+  local ditaa_files = {}
+  for _, job in ipairs(pending) do
+    if job.tool == "ditaa" then
+      table.insert(ditaa_files, job.infile)
+    end
+  end
+
+  -- Collect individual commands (graphviz, mermaid, tikz)
+  local other_cmds = {}
+  for _, job in ipairs(pending) do
+    if job.cmd then
+      table.insert(other_cmds, job.cmd)
+    end
+  end
+
+  if parallel then
+    -- All tool groups run concurrently
+    local parts = {}
+
+    -- PlantUML batch as one background job (one JVM)
+    if #puml_files > 0 then
+      local puml_cmd = "plantuml -tsvg " .. table.concat(puml_files, " ")
+      if is_pdf then
+        -- Chain SVG→PDF conversions after plantuml finishes
+        for _, job in ipairs(puml_jobs) do
+          puml_cmd = puml_cmd
+            .. " && rsvg-convert -f pdf -o " .. job.outfile .. " " .. job.svgfile
+        end
+      end
+      table.insert(parts, "(" .. puml_cmd .. ") &")
+    end
+
+    -- Ditaa batch as one background job (one JVM)
+    if #ditaa_files > 0 then
+      table.insert(parts, "(plantuml -tpng " .. table.concat(ditaa_files, " ") .. ") &")
+    end
+
+    -- Each other tool as its own background job
+    for _, cmd in ipairs(other_cmds) do
+      table.insert(parts, "(" .. cmd .. ") &")
+    end
+
+    table.insert(parts, "wait")
+    os.execute(table.concat(parts, " "))
+  else
+    -- Sequential: still batch plantuml/ditaa (one JVM each)
+    if #puml_files > 0 then
+      os.execute("plantuml -tsvg " .. table.concat(puml_files, " "))
+      if is_pdf then
+        for _, job in ipairs(puml_jobs) do
+          os.execute("rsvg-convert -f pdf -o " .. job.outfile .. " " .. job.svgfile)
+        end
+      end
+    end
+
+    if #ditaa_files > 0 then
+      os.execute("plantuml -tpng " .. table.concat(ditaa_files, " "))
+    end
+
+    for _, cmd in ipairs(other_cmds) do
+      os.execute(cmd)
+    end
+  end
+
+  -- Clean up temp files
   for _, job in ipairs(pending) do
     if job.cleanup then
       for _, f in ipairs(job.cleanup) do os.remove(f) end
     end
   end
+
   jobs_done = true
 end
 
-local function par_pass2_Div(div)
-  ensure_jobs_done()
+------------------------------------------------------------------------
+-- Pass 2: replace placeholders with rendered images
+------------------------------------------------------------------------
+
+local function pass2_Div(div)
+  execute_all()
   local id = div.identifier
   for _, job in ipairs(pending) do
     if job.id == id then
@@ -227,14 +320,10 @@ local function par_pass2_Div(div)
 end
 
 ------------------------------------------------------------------------
--- Return filter(s)
+-- Return two-pass filter
 ------------------------------------------------------------------------
 
-if parallel then
-  return {
-    {CodeBlock = par_pass1_CodeBlock},
-    {Div = par_pass2_Div}
-  }
-else
-  return {{CodeBlock = seq_CodeBlock}}
-end
+return {
+  {CodeBlock = pass1_CodeBlock},
+  {Div = pass2_Div}
+}
