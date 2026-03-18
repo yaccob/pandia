@@ -11,6 +11,7 @@ All diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zoo
 | Graphviz   | `` ```graphviz ``   | Vector (PDF/SVG)       |
 | Mermaid    | `` ```mermaid ``    | Vector (PDF/SVG)       |
 | Ditaa      | `` ```ditaa ``      | Raster (PNG)           |
+| TikZ       | `` ```tikz ``       | Vector (PDF), PNG in HTML |
 | LaTeX Math | `$...$` / `$$...$$` | Native (Pandoc)        |
 
 ## Installation
@@ -28,7 +29,7 @@ This installs `pandia` and all required tools (Pandoc, PlantUML, Graphviz, Merma
 ### Manual Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yaccob/pandia/v1.0.0/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/yaccob/pandia/v1.1.0/install.sh | sh
 ```
 
 Installs the `pandia` script to `~/.local/bin`. You still need either:

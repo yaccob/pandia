@@ -124,6 +124,24 @@ gantt
         +-------------------------+
 ```
 
+## TikZ – Vector Drawing
+
+```tikz
+\begin{tikzpicture}[node distance=2cm, auto, thick]
+  \node[circle, draw, fill=green!20] (start) {Start};
+  \node[rectangle, draw, fill=blue!10, right of=start] (process) {Process};
+  \node[diamond, draw, fill=yellow!20, aspect=2, right of=process] (decision) {OK?};
+  \node[circle, draw, fill=red!20, right of=decision] (end) {End};
+  \node[rectangle, draw, fill=orange!10, below of=decision] (fix) {Fix};
+
+  \draw[->] (start) -- (process);
+  \draw[->] (process) -- (decision);
+  \draw[->] (decision) -- node {yes} (end);
+  \draw[->] (decision) -- node {no} (fix);
+  \draw[->] (fix) -| (process);
+\end{tikzpicture}
+```
+
 ## LaTeX Formulas
 
 ### Inline
@@ -170,4 +188,5 @@ $$a_{n+1} = \begin{cases} \frac{a_n}{2} & \text{if } a_n \text{ is even} \\ 3a_n
 | Graphviz  | `` ```graphviz ``   | via Lua filter |
 | Mermaid   | `` ```mermaid ``    | via Lua filter |
 | Ditaa     | `` ```ditaa ``      | via Lua filter |
+| TikZ      | `` ```tikz ``       | via Lua filter |
 | LaTeX     | `$...$` / `$$...$$` | Pandoc native  |
