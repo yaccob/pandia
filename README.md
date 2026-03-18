@@ -49,11 +49,10 @@ docker run --rm -v "$PWD:/data" yaccob/pandia --all myfile.md
 pandia [OPTIONS] <input.md>
 
 Options:
-  --pdf              Generate PDF output (default)
-  --html             Generate HTML output
-  --all              Generate both PDF and HTML
+  -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
   --watch            Watch for changes and regenerate automatically
   -o, --output NAME  Base name for output files (default: derived from input)
+  --maxwidth WIDTH   Max content width for HTML output (default: 60em)
   --docker           Force Docker mode (skip local tools)
   --local            Force local mode (fail if tools missing)
   -v, --version      Show version
@@ -63,20 +62,23 @@ Options:
 ### Examples
 
 ```bash
-# Generate PDF (default)
+# Generate HTML (default)
 pandia myfile.md
 
+# Generate PDF
+pandia -t pdf myfile.md
+
 # Generate both PDF and HTML
-pandia --all myfile.md
+pandia -t pdf -t html myfile.md
 
 # Watch mode — regenerate on every save
-pandia --watch --all myfile.md
+pandia --watch -t pdf -t html myfile.md
 
 # Custom output name
-pandia --all -o report myfile.md
+pandia -t pdf -o report myfile.md
 
 # Force Docker even if local tools are available
-pandia --docker --all myfile.md
+pandia --docker -t pdf myfile.md
 ```
 
 ## Example Document
@@ -127,8 +129,8 @@ Much like your diagrams before you ran `pandia --all`.
 ## How It Works
 
 pandia wraps [Pandoc](https://pandoc.org/) with a custom Lua filter that intercepts
-`plantuml`, `graphviz`, `mermaid`, and `ditaa` code blocks, renders them via their
-respective CLI tools, and passes the results back to Pandoc for PDF or HTML output.
+`plantuml`, `graphviz`, `mermaid`, `ditaa`, and `tikz` code blocks, renders them via their
+respective CLI tools (or `pdflatex` for TikZ), and passes the results back to Pandoc for PDF or HTML output.
 
 - **Local mode:** Calls tools directly — fast, no overhead
 - **Docker mode:** Runs everything in a self-contained container — no setup required

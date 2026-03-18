@@ -9,9 +9,7 @@ usage() {
 Usage: docker run --rm -v "$PWD:/data" yaccob/pandia [OPTIONS] <input.md>
 
 Options:
-  --pdf              Generate PDF output (default if no format specified)
-  --html             Generate HTML output
-  --all              Generate both PDF and HTML
+  -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
   --watch            Watch for changes and regenerate automatically
   -o, --output NAME  Base name for output files (default: derived from input)
   --maxwidth WIDTH   Max content width for HTML output (default: 60em)
@@ -19,8 +17,8 @@ Options:
 
 Examples:
   docker run --rm -v "$PWD:/data" yaccob/pandia example.md
-  docker run --rm -v "$PWD:/data" yaccob/pandia --all example.md
-  docker run --rm -v "$PWD:/data" yaccob/pandia --watch --all example.md
+  docker run --rm -v "$PWD:/data" yaccob/pandia -t pdf -t html example.md
+  docker run --rm -v "$PWD:/data" yaccob/pandia --watch -t pdf example.md
 EOF
   exit 0
 }
@@ -36,14 +34,18 @@ INPUT=""
 # Parse arguments
 while [ $# -gt 0 ]; do
   case "$1" in
-    --pdf)       FORMAT_PDF=true; shift ;;
-    --html)      FORMAT_HTML=true; shift ;;
-    --all)       FORMAT_PDF=true; FORMAT_HTML=true; shift ;;
-    --watch)     WATCH=true; shift ;;
+    -t|--to)
+      case "$2" in
+        pdf)  FORMAT_PDF=true ;;
+        html) FORMAT_HTML=true ;;
+        *)    echo "Error: Unknown format '$2'. Use 'pdf' or 'html'." >&2; exit 1 ;;
+      esac
+      shift 2 ;;
+    --watch)      WATCH=true; shift ;;
     -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
     --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
     -h|--help)    usage ;;
-    -*)          echo "Unknown option: $1" >&2; usage ;;
+    -*)           echo "Unknown option: $1" >&2; usage ;;
     *)           INPUT="$1"; shift ;;
   esac
 done
@@ -58,9 +60,9 @@ if [ ! -f "$INPUT" ]; then
   exit 1
 fi
 
-# Default to PDF if no format specified
+# Default to HTML if no format specified
 if [ "$FORMAT_PDF" = false ] && [ "$FORMAT_HTML" = false ]; then
-  FORMAT_PDF=true
+  FORMAT_HTML=true
 fi
 
 # Derive output base name from input if not specified

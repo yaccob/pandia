@@ -52,9 +52,7 @@ pandia v${VERSION} — Markdown to PDF/HTML with diagrams and LaTeX math
 Usage: pandia [OPTIONS] <input.md>
 
 Options:
-  --pdf              Generate PDF output (default if no format specified)
-  --html             Generate HTML output
-  --all              Generate both PDF and HTML
+  -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
   --watch            Watch for changes and regenerate automatically
   -o, --output NAME  Base name for output files (default: derived from input)
   --maxwidth WIDTH   Max content width for HTML output (default: 60em)
@@ -63,7 +61,7 @@ Options:
   -v, --version      Show version
   -h, --help         Show this help
 
-Supported diagram types: plantuml, graphviz/dot, mermaid, ditaa
+Supported diagram types: plantuml, graphviz/dot, mermaid, ditaa, tikz
 LaTeX math: \$...\$ (inline) and \$\$...\$\$ (block)
 EOF
   exit 0
@@ -80,9 +78,13 @@ FORCE_MODE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --pdf)        FORMAT_PDF=true; shift ;;
-    --html)       FORMAT_HTML=true; shift ;;
-    --all)        FORMAT_PDF=true; FORMAT_HTML=true; shift ;;
+    -t|--to)
+      case "$2" in
+        pdf)  FORMAT_PDF=true ;;
+        html) FORMAT_HTML=true ;;
+        *)    echo "Error: Unknown format '$2'. Use 'pdf' or 'html'." >&2; exit 1 ;;
+      esac
+      shift 2 ;;
     --watch)      WATCH=true; shift ;;
     -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
     --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
@@ -106,9 +108,9 @@ if [ ! -f "$INPUT" ]; then
   exit 1
 fi
 
-# Default to PDF
+# Default to HTML
 if [ "$FORMAT_PDF" = false ] && [ "$FORMAT_HTML" = false ]; then
-  FORMAT_PDF=true
+  FORMAT_HTML=true
 fi
 
 # Derive output base name
@@ -146,12 +148,11 @@ fi
 # --- Build format flags ---
 build_format_flags() {
   flags=""
-  if [ "$FORMAT_PDF" = true ] && [ "$FORMAT_HTML" = true ]; then
-    flags="--all"
-  elif [ "$FORMAT_PDF" = true ]; then
-    flags="--pdf"
-  elif [ "$FORMAT_HTML" = true ]; then
-    flags="--html"
+  if [ "$FORMAT_PDF" = true ]; then
+    flags="$flags -t pdf"
+  fi
+  if [ "$FORMAT_HTML" = true ]; then
+    flags="$flags -t html"
   fi
   if [ -n "$OUTPUT_BASE" ]; then
     flags="$flags -o $OUTPUT_BASE"
