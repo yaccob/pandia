@@ -29,7 +29,7 @@ This installs `pandia` and all required tools (Pandoc, PlantUML, Graphviz, Merma
 ### Manual Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yaccob/pandia/v1.1.0/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/yaccob/pandia/v1.2.0/install.sh | sh
 ```
 
 Installs the `pandia` script to `~/.local/bin`. You still need either:
