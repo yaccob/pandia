@@ -45,6 +45,9 @@ ENV MMDC_PUPPETEER_CONFIG=/etc/mermaid-puppeteer-config.json
 # Install the Lua filter
 COPY diagram-filter.lua /usr/local/share/pandoc/filters/diagram-filter.lua
 
+# Mermaid render server (placed inside mermaid-cli for correct import resolution)
+COPY mermaid-server.mjs /usr/local/lib/node_modules/@mermaid-js/mermaid-cli/mermaid-server.mjs
+
 WORKDIR /data
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

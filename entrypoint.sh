@@ -73,6 +73,21 @@ if [ "$PARALLEL" = true ]; then
   export PANDIA_PARALLEL=1
 fi
 
+# Start mermaid render server (keeps Chromium alive across rebuilds)
+MERMAID_SERVER_SCRIPT="/usr/local/lib/node_modules/@mermaid-js/mermaid-cli/mermaid-server.mjs"
+if [ -f "$MERMAID_SERVER_SCRIPT" ]; then
+  node "$MERMAID_SERVER_SCRIPT" &
+  MERMAID_PID=$!
+  # Wait for server to be ready
+  for _ in $(seq 1 30); do
+    if [ -f /tmp/mermaid-server.ready ]; then break; fi
+    sleep 0.2
+  done
+  if [ -f /tmp/mermaid-server.ready ]; then
+    export MERMAID_SERVER="http://127.0.0.1:$(cat /tmp/mermaid-server.ready)"
+  fi
+fi
+
 # Derive output base name from input if not specified
 if [ -z "$OUTPUT_BASE" ]; then
   OUTPUT_BASE="$(basename "$INPUT" .md)"

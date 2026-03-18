@@ -7,8 +7,10 @@
 --
 -- Set PANDIA_PARALLEL=1 to render diagrams in parallel
 --
--- PlantUML and ditaa diagrams are batched into single JVM calls regardless
--- of parallel mode, avoiding repeated JVM startup overhead.
+-- Batching: PlantUML, ditaa, and mermaid diagrams are batched to avoid
+-- repeated JVM/Chromium startup overhead.
+-- Set MERMAID_SERVER=http://host:port to use a persistent render server
+-- instead of mmdc batch mode (used in container for watch mode).
 
 local filecounter = 0
 local imgdir = "img"
@@ -19,6 +21,9 @@ local parallel = os.getenv("PANDIA_PARALLEL") == "1"
 -- Optional puppeteer config for mermaid (needed in containers)
 local mmdc_puppeteer = os.getenv("MMDC_PUPPETEER_CONFIG")
 local mmdc_extra = mmdc_puppeteer and (" -p " .. mmdc_puppeteer) or ""
+
+-- Optional mermaid server (container mode)
+local mermaid_server = os.getenv("MERMAID_SERVER")
 
 local function ensure_imgdir()
   os.execute("mkdir -p " .. imgdir)
@@ -94,28 +99,14 @@ local function prepare_mermaid(code)
   ensure_imgdir()
   filecounter = filecounter + 1
   local basename = imgdir .. "/mermaid-" .. filecounter
-  local infile = basename .. ".mmd"
-  local f = io.open(infile, "w")
-  f:write(code)
-  f:close()
+  local fmt = is_html and "svg" or "pdf"
 
-  if is_html then
-    local outfile = basename .. ".svg"
-    return {
-      tool = "mermaid",
-      outfile = outfile,
-      cmd = "mmdc -i " .. infile .. " -o " .. outfile .. mmdc_extra .. " --quiet 2>/dev/null",
-      cleanup = {infile},
-    }
-  else
-    local outfile = basename .. ".pdf"
-    return {
-      tool = "mermaid",
-      outfile = outfile,
-      cmd = "mmdc -i " .. infile .. " -o " .. outfile .. mmdc_extra .. " --quiet 2>/dev/null",
-      cleanup = {infile},
-    }
-  end
+  return {
+    tool = "mermaid",
+    code = code,
+    outfile = basename .. "." .. fmt,
+    fmt = fmt,
+  }
 end
 
 local function prepare_ditaa(code)
@@ -213,7 +204,77 @@ local function pass1_CodeBlock(block)
 end
 
 ------------------------------------------------------------------------
--- Execution: batch plantuml/ditaa, run others individually or parallel
+-- Mermaid batch rendering
+------------------------------------------------------------------------
+
+local function execute_mermaid_server(mermaid_jobs)
+  -- Container mode: send render requests to the persistent mermaid server
+  if parallel then
+    local parts = {}
+    for _, job in ipairs(mermaid_jobs) do
+      parts[#parts + 1] = "(wget -q -O /dev/null '"
+        .. mermaid_server .. "/render?in=" .. job.infile
+        .. "&out=" .. job.outfile .. "&fmt=" .. job.fmt .. "') &"
+    end
+    parts[#parts + 1] = "wait"
+    os.execute(table.concat(parts, " "))
+  else
+    for _, job in ipairs(mermaid_jobs) do
+      os.execute("wget -q -O /dev/null '"
+        .. mermaid_server .. "/render?in=" .. job.infile
+        .. "&out=" .. job.outfile .. "&fmt=" .. job.fmt .. "'")
+    end
+  end
+end
+
+local function execute_mermaid_batch(mermaid_jobs)
+  -- Local/container fallback: batch all mermaid diagrams via mmdc markdown mode
+  -- (one Chromium launch for all diagrams)
+  local batchfile = imgdir .. "/mermaid-batch.md"
+  local outbase = imgdir .. "/mermaid-out"
+  local fmt = mermaid_jobs[1].fmt
+
+  local f = io.open(batchfile, "w")
+  for _, job in ipairs(mermaid_jobs) do
+    f:write("```mermaid\n" .. job.code .. "\n```\n\n")
+  end
+  f:close()
+
+  os.execute("mmdc -i " .. batchfile .. " -o " .. outbase .. ".md -e " .. fmt
+    .. mmdc_extra .. " --quiet 2>/dev/null")
+
+  -- Rename mmdc numbered outputs to expected job outfiles
+  for i, job in ipairs(mermaid_jobs) do
+    local mmdc_out = outbase .. "-" .. i .. "." .. fmt
+    os.rename(mmdc_out, job.outfile)
+  end
+
+  -- Cleanup batch files
+  os.remove(batchfile)
+  os.remove(outbase .. ".md")
+end
+
+local function execute_mermaid(mermaid_jobs)
+  if #mermaid_jobs == 0 then return end
+
+  -- Write input files for server mode (batch mode uses inline code)
+  if mermaid_server then
+    for _, job in ipairs(mermaid_jobs) do
+      local infile = job.outfile:gsub("%.[^.]+$", ".mmd")
+      local f = io.open(infile, "w")
+      f:write(job.code)
+      f:close()
+      job.infile = infile
+      job.cleanup = {infile}
+    end
+    execute_mermaid_server(mermaid_jobs)
+  else
+    execute_mermaid_batch(mermaid_jobs)
+  end
+end
+
+------------------------------------------------------------------------
+-- Execution: batch plantuml/ditaa/mermaid, run others individually
 ------------------------------------------------------------------------
 
 local jobs_done = false
@@ -221,27 +282,22 @@ local jobs_done = false
 local function execute_all()
   if jobs_done or #pending == 0 then return end
 
-  -- Collect plantuml and ditaa files for batching
+  -- Collect jobs by tool
   local puml_files = {}
   local puml_jobs = {}
+  local ditaa_files = {}
+  local mermaid_jobs = {}
+  local other_cmds = {}
+
   for _, job in ipairs(pending) do
     if job.tool == "plantuml" then
       table.insert(puml_files, job.infile)
       table.insert(puml_jobs, job)
-    end
-  end
-
-  local ditaa_files = {}
-  for _, job in ipairs(pending) do
-    if job.tool == "ditaa" then
+    elseif job.tool == "ditaa" then
       table.insert(ditaa_files, job.infile)
-    end
-  end
-
-  -- Collect individual commands (graphviz, mermaid, tikz)
-  local other_cmds = {}
-  for _, job in ipairs(pending) do
-    if job.cmd then
+    elseif job.tool == "mermaid" then
+      table.insert(mermaid_jobs, job)
+    elseif job.cmd then
       table.insert(other_cmds, job.cmd)
     end
   end
@@ -254,7 +310,6 @@ local function execute_all()
     if #puml_files > 0 then
       local puml_cmd = "plantuml -tsvg " .. table.concat(puml_files, " ")
       if is_pdf then
-        -- Chain SVG→PDF conversions after plantuml finishes
         for _, job in ipairs(puml_jobs) do
           puml_cmd = puml_cmd
             .. " && rsvg-convert -f pdf -o " .. job.outfile .. " " .. job.svgfile
@@ -268,15 +323,49 @@ local function execute_all()
       table.insert(parts, "(plantuml -tpng " .. table.concat(ditaa_files, " ") .. ") &")
     end
 
-    -- Each other tool as its own background job
+    -- Each other tool (graphviz, tikz) as its own background job
     for _, cmd in ipairs(other_cmds) do
       table.insert(parts, "(" .. cmd .. ") &")
     end
 
-    table.insert(parts, "wait")
-    os.execute(table.concat(parts, " "))
+    -- Mermaid: batch or server (runs as one background job)
+    if #mermaid_jobs > 0 and not mermaid_server then
+      -- mmdc batch in background (one Chromium)
+      local batchfile = imgdir .. "/mermaid-batch.md"
+      local outbase = imgdir .. "/mermaid-out"
+      local fmt = mermaid_jobs[1].fmt
+      local f = io.open(batchfile, "w")
+      for _, job in ipairs(mermaid_jobs) do
+        f:write("```mermaid\n" .. job.code .. "\n```\n\n")
+      end
+      f:close()
+      local mmdc_cmd = "mmdc -i " .. batchfile .. " -o " .. outbase .. ".md -e " .. fmt
+        .. mmdc_extra .. " --quiet 2>/dev/null"
+      table.insert(parts, "(" .. mmdc_cmd .. ") &")
+    end
+
+    if #parts > 0 then
+      table.insert(parts, "wait")
+      os.execute(table.concat(parts, " "))
+    end
+
+    -- Mermaid server mode: send requests (potentially parallel)
+    if #mermaid_jobs > 0 and mermaid_server then
+      execute_mermaid(mermaid_jobs)
+    end
+
+    -- Mermaid batch: rename outputs after wait
+    if #mermaid_jobs > 0 and not mermaid_server then
+      local outbase = imgdir .. "/mermaid-out"
+      local fmt = mermaid_jobs[1].fmt
+      for i, job in ipairs(mermaid_jobs) do
+        os.rename(outbase .. "-" .. i .. "." .. fmt, job.outfile)
+      end
+      os.remove(imgdir .. "/mermaid-batch.md")
+      os.remove(outbase .. ".md")
+    end
   else
-    -- Sequential: still batch plantuml/ditaa (one JVM each)
+    -- Sequential mode: still batch all tool groups
     if #puml_files > 0 then
       os.execute("plantuml -tsvg " .. table.concat(puml_files, " "))
       if is_pdf then
@@ -289,6 +378,8 @@ local function execute_all()
     if #ditaa_files > 0 then
       os.execute("plantuml -tpng " .. table.concat(ditaa_files, " "))
     end
+
+    execute_mermaid(mermaid_jobs)
 
     for _, cmd in ipairs(other_cmds) do
       os.execute(cmd)
