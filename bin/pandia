@@ -53,6 +53,7 @@ Usage: pandia [OPTIONS] <input.md>
 
 Options:
   -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
+  --parallel         Render diagrams in parallel (faster for multiple diagrams)
   --watch            Watch for changes and regenerate automatically
   -o, --output NAME  Base name for output files (default: derived from input)
   --maxwidth WIDTH   Max content width for HTML output (default: 60em)
@@ -70,6 +71,7 @@ EOF
 # --- Argument parsing ---
 FORMAT_PDF=false
 FORMAT_HTML=false
+PARALLEL=false
 WATCH=false
 OUTPUT_BASE=""
 MAXWIDTH="60em"
@@ -85,6 +87,7 @@ while [ $# -gt 0 ]; do
         *)    echo "Error: Unknown format '$2'. Use 'pdf' or 'html'." >&2; exit 1 ;;
       esac
       shift 2 ;;
+    --parallel)   PARALLEL=true; shift ;;
     --watch)      WATCH=true; shift ;;
     -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
     --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
@@ -169,6 +172,10 @@ run_local() {
   PANDOC_COMMON="--lua-filter=$FILTER --from=gfm+tex_math_dollars"
   INPUT_ABS="$(cd "$(dirname "$INPUT")" && pwd)/$(basename "$INPUT")"
 
+  if [ "$PARALLEL" = true ]; then
+    export PANDIA_PARALLEL=1
+  fi
+
   if [ "$FORMAT_PDF" = true ]; then
     echo "Generating ${OUTPUT_BASE}.pdf ..."
     pandoc $PANDOC_COMMON \
@@ -199,7 +206,11 @@ run_docker() {
   INPUT_FILE="$(basename "$INPUT")"
   FLAGS="$(build_format_flags)"
 
-  $DOCKER run --rm -v "${INPUT_DIR}:/data" "${IMAGE}:${VERSION}" $FLAGS "$INPUT_FILE"
+  DOCKER_ENV=""
+  if [ "$PARALLEL" = true ]; then
+    DOCKER_ENV="-e PANDIA_PARALLEL=1"
+  fi
+  $DOCKER run --rm $DOCKER_ENV -v "${INPUT_DIR}:/data" "${IMAGE}:${VERSION}" $FLAGS "$INPUT_FILE"
 }
 
 # --- Watch mode ---

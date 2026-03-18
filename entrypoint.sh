@@ -10,6 +10,7 @@ Usage: docker run --rm -v "$PWD:/data" yaccob/pandia [OPTIONS] <input.md>
 
 Options:
   -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
+  --parallel         Render diagrams in parallel (faster for multiple diagrams)
   --watch            Watch for changes and regenerate automatically
   -o, --output NAME  Base name for output files (default: derived from input)
   --maxwidth WIDTH   Max content width for HTML output (default: 60em)
@@ -26,6 +27,7 @@ EOF
 # Defaults
 FORMAT_PDF=false
 FORMAT_HTML=false
+PARALLEL=false
 WATCH=false
 OUTPUT_BASE=""
 MAXWIDTH="60em"
@@ -41,6 +43,7 @@ while [ $# -gt 0 ]; do
         *)    echo "Error: Unknown format '$2'. Use 'pdf' or 'html'." >&2; exit 1 ;;
       esac
       shift 2 ;;
+    --parallel)   PARALLEL=true; shift ;;
     --watch)      WATCH=true; shift ;;
     -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
     --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
@@ -63,6 +66,11 @@ fi
 # Default to HTML if no format specified
 if [ "$FORMAT_PDF" = false ] && [ "$FORMAT_HTML" = false ]; then
   FORMAT_HTML=true
+fi
+
+# Enable parallel rendering if requested
+if [ "$PARALLEL" = true ]; then
+  export PANDIA_PARALLEL=1
 fi
 
 # Derive output base name from input if not specified

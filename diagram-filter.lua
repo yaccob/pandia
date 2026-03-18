@@ -4,13 +4,14 @@
 --
 -- For PDF output: vector graphics (PDF) where possible, PNG only for ditaa
 -- For HTML output: SVG where possible, PNG for ditaa and tikz
-
-local pipe = pandoc.pipe
+--
+-- Set PANDIA_PARALLEL=1 to render diagrams in parallel (two-pass filter)
 
 local filecounter = 0
 local imgdir = "img"
 local is_html = false
 local is_pdf = false
+local parallel = os.getenv("PANDIA_PARALLEL") == "1"
 
 -- Optional puppeteer config for mermaid (needed in containers)
 local mmdc_puppeteer = os.getenv("MMDC_PUPPETEER_CONFIG")
@@ -20,12 +21,16 @@ local function ensure_imgdir()
   os.execute("mkdir -p " .. imgdir)
 end
 
--- Convert SVG to PDF using rsvg-convert (for LaTeX/PDF embedding)
-local function svg_to_pdf(svgfile, pdffile)
-  os.execute("rsvg-convert -f pdf -o " .. pdffile .. " " .. svgfile)
+local function detect_format()
+  is_html = FORMAT:match("html") ~= nil
+  is_pdf = not is_html
 end
 
-local function render_plantuml(code)
+------------------------------------------------------------------------
+-- Prepare functions: write input files, return (outfile, cmd, cleanup)
+------------------------------------------------------------------------
+
+local function prepare_plantuml(code)
   ensure_imgdir()
   filecounter = filecounter + 1
   local basename = imgdir .. "/plantuml-" .. filecounter
@@ -36,42 +41,37 @@ local function render_plantuml(code)
 
   if is_html then
     local outfile = basename .. ".svg"
-    pipe("plantuml", {"-tsvg", infile}, "")
-    os.remove(infile)
-    return outfile
+    return outfile, "plantuml -tsvg " .. infile, {infile}
   else
-    -- Generate SVG, then convert to PDF for crisp vector output
     local svgfile = basename .. ".svg"
     local outfile = basename .. ".pdf"
-    pipe("plantuml", {"-tsvg", infile}, "")
-    svg_to_pdf(svgfile, outfile)
-    os.remove(infile)
-    return outfile
+    return outfile,
+      "plantuml -tsvg " .. infile
+        .. " && rsvg-convert -f pdf -o " .. outfile .. " " .. svgfile,
+      {infile, svgfile}
   end
 end
 
-local function render_graphviz(code, engine)
+local function prepare_graphviz(code, engine)
   ensure_imgdir()
   filecounter = filecounter + 1
   local basename = imgdir .. "/graphviz-" .. filecounter
+  local infile = basename .. ".dot"
+  local f = io.open(infile, "w")
+  f:write(code)
+  f:close()
+  engine = engine or "dot"
 
   if is_html then
     local outfile = basename .. ".svg"
-    local f = io.open(outfile, "w")
-    f:write(pipe(engine or "dot", {"-Tsvg"}, code))
-    f:close()
-    return outfile
+    return outfile, engine .. " -Tsvg -o " .. outfile .. " " .. infile, {infile}
   else
-    -- Graphviz can output PDF directly
     local outfile = basename .. ".pdf"
-    local f = io.open(outfile, "w")
-    f:write(pipe(engine or "dot", {"-Tpdf"}, code))
-    f:close()
-    return outfile
+    return outfile, engine .. " -Tpdf -o " .. outfile .. " " .. infile, {infile}
   end
 end
 
-local function render_mermaid(code)
+local function prepare_mermaid(code)
   ensure_imgdir()
   filecounter = filecounter + 1
   local basename = imgdir .. "/mermaid-" .. filecounter
@@ -82,20 +82,18 @@ local function render_mermaid(code)
 
   if is_html then
     local outfile = basename .. ".svg"
-    os.execute("mmdc -i " .. infile .. " -o " .. outfile .. mmdc_extra .. " --quiet 2>/dev/null")
-    os.remove(infile)
-    return outfile
+    return outfile,
+      "mmdc -i " .. infile .. " -o " .. outfile .. mmdc_extra .. " --quiet 2>/dev/null",
+      {infile}
   else
-    -- mmdc can output PDF directly (avoids foreignObject issues with rsvg-convert)
     local outfile = basename .. ".pdf"
-    os.execute("mmdc -i " .. infile .. " -o " .. outfile .. mmdc_extra .. " --quiet 2>/dev/null")
-    os.remove(infile)
-    return outfile
+    return outfile,
+      "mmdc -i " .. infile .. " -o " .. outfile .. mmdc_extra .. " --quiet 2>/dev/null",
+      {infile}
   end
 end
 
-local function render_ditaa(code)
-  -- ditaa is raster-only (ASCII art → pixels)
+local function prepare_ditaa(code)
   ensure_imgdir()
   filecounter = filecounter + 1
   local basename = imgdir .. "/ditaa-" .. filecounter
@@ -105,21 +103,17 @@ local function render_ditaa(code)
   local f = io.open(infile, "w")
   f:write(wrapped)
   f:close()
-  pipe("plantuml", {"-tpng", infile}, "")
-  os.remove(infile)
-  return outfile
+  return outfile, "plantuml -tpng " .. infile, {infile}
 end
 
-local function render_tikz(code)
+local function prepare_tikz(code)
   ensure_imgdir()
   filecounter = filecounter + 1
   local basename = imgdir .. "/tikz-" .. filecounter
   local texfile = basename .. ".tex"
   local pdffile = basename .. ".pdf"
 
-  -- Wrap in standalone LaTeX document
   local doc = "\\documentclass[tikz,border=2pt]{standalone}\n"
-  -- Allow additional packages via \usepackage in the code block
   if not code:match("\\begin{tikzpicture}") then
     doc = doc .. "\\begin{document}\n\\begin{tikzpicture}\n"
       .. code
@@ -132,49 +126,115 @@ local function render_tikz(code)
   f:write(doc)
   f:close()
 
-  -- Compile to PDF (run twice for references, suppress output)
-  os.execute("pdflatex -interaction=nonstopmode -output-directory=" .. imgdir
-    .. " " .. texfile .. " >/dev/null 2>&1")
-
-  -- Clean up aux files
-  os.remove(basename .. ".aux")
-  os.remove(basename .. ".log")
-  os.remove(texfile)
+  local compile = "pdflatex -interaction=nonstopmode -output-directory=" .. imgdir
+    .. " " .. texfile .. " >/dev/null 2>&1"
+  local cleanup = {texfile, basename .. ".aux", basename .. ".log"}
 
   if is_html then
-    -- Convert PDF to high-resolution PNG for HTML (no pdf2svg/dvisvgm available)
     local pngfile = basename .. ".png"
-    os.execute("gs -sDEVICE=pngalpha -r300 -dNOPAUSE -dBATCH -dQUIET"
-      .. " -sOutputFile=" .. pngfile .. " " .. pdffile .. " 2>/dev/null")
-    return pngfile
+    local cmd = compile
+      .. " && gs -sDEVICE=pngalpha -r300 -dNOPAUSE -dBATCH -dQUIET"
+      .. " -sOutputFile=" .. pngfile .. " " .. pdffile .. " 2>/dev/null"
+    return pngfile, cmd, cleanup
   else
-    return pdffile
+    return pdffile, compile, cleanup
   end
 end
 
-function CodeBlock(block)
-  -- Detect output format once per block (FORMAT can change)
-  is_html = FORMAT:match("html") ~= nil
-  is_pdf = not is_html
+local function get_prepare_fn(lang, attrs)
+  if lang == "plantuml" then
+    return prepare_plantuml
+  elseif lang == "graphviz" or lang == "dot" then
+    return function(code) return prepare_graphviz(code, attrs.engine) end
+  elseif lang == "mermaid" then
+    return prepare_mermaid
+  elseif lang == "ditaa" then
+    return prepare_ditaa
+  elseif lang == "tikz" then
+    return prepare_tikz
+  end
+  return nil
+end
 
+------------------------------------------------------------------------
+-- Sequential mode (default): single-pass filter
+------------------------------------------------------------------------
+
+local function seq_CodeBlock(block)
+  detect_format()
   local lang = block.classes[1]
   local caption = block.attributes.caption or ""
-  local outfile = nil
+  local prepare = get_prepare_fn(lang, block.attributes)
+  if not prepare then return nil end
 
-  if lang == "plantuml" then
-    outfile = render_plantuml(block.text)
-  elseif lang == "graphviz" or lang == "dot" then
-    local engine = block.attributes.engine or "dot"
-    outfile = render_graphviz(block.text, engine)
-  elseif lang == "mermaid" then
-    outfile = render_mermaid(block.text)
-  elseif lang == "ditaa" then
-    outfile = render_ditaa(block.text)
-  elseif lang == "tikz" then
-    outfile = render_tikz(block.text)
+  local outfile, cmd, cleanup = prepare(block.text)
+  os.execute(cmd)
+  if cleanup then
+    for _, f in ipairs(cleanup) do os.remove(f) end
   end
+  return pandoc.Para{pandoc.Image({pandoc.Str(caption)}, outfile)}
+end
 
-  if outfile then
-    return pandoc.Para{pandoc.Image({pandoc.Str(caption)}, outfile)}
+------------------------------------------------------------------------
+-- Parallel mode: two-pass filter
+------------------------------------------------------------------------
+
+local pending = {}
+
+local function par_pass1_CodeBlock(block)
+  detect_format()
+  local lang = block.classes[1]
+  local caption = block.attributes.caption or ""
+  local prepare = get_prepare_fn(lang, block.attributes)
+  if not prepare then return nil end
+
+  local outfile, cmd, cleanup = prepare(block.text)
+  local id = "pandia-job-" .. (#pending + 1)
+  table.insert(pending, {
+    id = id, outfile = outfile, caption = caption, cmd = cmd, cleanup = cleanup
+  })
+  return pandoc.Div({}, pandoc.Attr(id))
+end
+
+local jobs_done = false
+
+local function ensure_jobs_done()
+  if jobs_done or #pending == 0 then return end
+  -- Launch all render commands in parallel within one shell, then wait
+  local parts = {}
+  for _, job in ipairs(pending) do
+    table.insert(parts, "(" .. job.cmd .. ") &")
   end
+  table.insert(parts, "wait")
+  os.execute(table.concat(parts, " "))
+  -- Clean up temp input files
+  for _, job in ipairs(pending) do
+    if job.cleanup then
+      for _, f in ipairs(job.cleanup) do os.remove(f) end
+    end
+  end
+  jobs_done = true
+end
+
+local function par_pass2_Div(div)
+  ensure_jobs_done()
+  local id = div.identifier
+  for _, job in ipairs(pending) do
+    if job.id == id then
+      return pandoc.Para{pandoc.Image({pandoc.Str(job.caption)}, job.outfile)}
+    end
+  end
+end
+
+------------------------------------------------------------------------
+-- Return filter(s)
+------------------------------------------------------------------------
+
+if parallel then
+  return {
+    {CodeBlock = par_pass1_CodeBlock},
+    {Div = par_pass2_Div}
+  }
+else
+  return {{CodeBlock = seq_CodeBlock}}
 end
