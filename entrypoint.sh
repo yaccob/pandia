@@ -12,6 +12,7 @@ Options:
   -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
   --parallel         Render diagrams in parallel (faster for multiple diagrams)
   --watch            Watch for changes and regenerate automatically
+  --serve [PORT]     Start HTTP server for rendering (default port: 3300)
   -o, --output NAME  Base name for output files (default: derived from input)
   --maxwidth WIDTH   Max content width for HTML output (default: 60em)
   -h, --help         Show this help
@@ -20,6 +21,7 @@ Examples:
   docker run --rm -v "$PWD:/data" yaccob/pandia example.md
   docker run --rm -v "$PWD:/data" yaccob/pandia -t pdf -t html example.md
   docker run --rm -v "$PWD:/data" yaccob/pandia --watch -t pdf example.md
+  docker run -d -p 3300:3300 -v "$PWD:/data" --name pandia yaccob/pandia --serve
 EOF
   exit 0
 }
@@ -29,6 +31,8 @@ FORMAT_PDF=false
 FORMAT_HTML=false
 PARALLEL=false
 WATCH=false
+SERVE=false
+SERVE_PORT="3300"
 OUTPUT_BASE=""
 MAXWIDTH="60em"
 INPUT=""
@@ -45,6 +49,11 @@ while [ $# -gt 0 ]; do
       shift 2 ;;
     --parallel)   PARALLEL=true; shift ;;
     --watch)      WATCH=true; shift ;;
+    --serve)      SERVE=true
+                  if [ -n "$2" ] && [ "${2#-}" = "$2" ] 2>/dev/null; then
+                    SERVE_PORT="$2"; shift
+                  fi
+                  shift ;;
     -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
     --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
     -h|--help)    usage ;;
@@ -52,6 +61,13 @@ while [ $# -gt 0 ]; do
     *)           INPUT="$1"; shift ;;
   esac
 done
+
+# Handle --serve mode (no input file needed)
+if [ "$SERVE" = true ]; then
+  export PANDIA_PORT="$SERVE_PORT"
+  echo "Starting pandia server on port $SERVE_PORT ..."
+  exec node /usr/local/share/pandia/pandia-server.mjs
+fi
 
 if [ -z "$INPUT" ]; then
   echo "Error: No input file specified." >&2

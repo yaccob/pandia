@@ -55,6 +55,7 @@ Options:
   -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
   --parallel         Render diagrams in parallel (faster for multiple diagrams)
   --watch            Watch for changes and regenerate automatically
+  --serve [PORT]     Start persistent server (Docker mode, default port: 3300)
   -o, --output NAME  Base name for output files (default: derived from input)
   --maxwidth WIDTH   Max content width for HTML output (default: 60em)
   --docker           Force Docker mode (skip local tools)
@@ -73,6 +74,8 @@ FORMAT_PDF=false
 FORMAT_HTML=false
 PARALLEL=false
 WATCH=false
+SERVE=false
+SERVE_PORT="3300"
 OUTPUT_BASE=""
 MAXWIDTH="60em"
 INPUT=""
@@ -89,6 +92,11 @@ while [ $# -gt 0 ]; do
       shift 2 ;;
     --parallel)   PARALLEL=true; shift ;;
     --watch)      WATCH=true; shift ;;
+    --serve)      SERVE=true
+                  if [ -n "$2" ] && [ "${2#-}" = "$2" ] 2>/dev/null; then
+                    SERVE_PORT="$2"; shift
+                  fi
+                  shift ;;
     -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
     --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
     --docker)     FORCE_MODE="docker"; shift ;;
@@ -99,6 +107,20 @@ while [ $# -gt 0 ]; do
     *)            INPUT="$1"; shift ;;
   esac
 done
+
+# Handle --serve mode (Docker only, no input file needed)
+if [ "$SERVE" = true ]; then
+  if ! has_docker; then
+    echo "Error: --serve requires Docker or Podman." >&2
+    exit 1
+  fi
+  DOCKER="$(get_docker)"
+  echo "Starting pandia server on port $SERVE_PORT ..."
+  echo "Usage: curl -X POST http://localhost:$SERVE_PORT/render -d 'file=example.md&to=html,pdf'"
+  echo "Stop:  $DOCKER stop pandia && $DOCKER rm pandia"
+  exec $DOCKER run --rm --name pandia -p "${SERVE_PORT}:${SERVE_PORT}" \
+    -v "$(pwd):/data" "${IMAGE}:${VERSION}" --serve "$SERVE_PORT"
+fi
 
 if [ -z "$INPUT" ]; then
   echo "Error: No input file specified." >&2
