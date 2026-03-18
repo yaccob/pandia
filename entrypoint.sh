@@ -14,6 +14,7 @@ Options:
   --all              Generate both PDF and HTML
   --watch            Watch for changes and regenerate automatically
   -o, --output NAME  Base name for output files (default: derived from input)
+  --maxwidth WIDTH   Max content width for HTML output (default: 60em)
   -h, --help         Show this help
 
 Examples:
@@ -29,6 +30,7 @@ FORMAT_PDF=false
 FORMAT_HTML=false
 WATCH=false
 OUTPUT_BASE=""
+MAXWIDTH="60em"
 INPUT=""
 
 # Parse arguments
@@ -38,8 +40,9 @@ while [ $# -gt 0 ]; do
     --html)      FORMAT_HTML=true; shift ;;
     --all)       FORMAT_PDF=true; FORMAT_HTML=true; shift ;;
     --watch)     WATCH=true; shift ;;
-    -o|--output) OUTPUT_BASE="$2"; shift 2 ;;
-    -h|--help)   usage ;;
+    -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
+    --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
+    -h|--help)    usage ;;
     -*)          echo "Unknown option: $1" >&2; usage ;;
     *)           INPUT="$1"; shift ;;
   esac
@@ -83,6 +86,7 @@ generate() {
       --to=html5 \
       --standalone \
       --mathjax \
+      -V maxwidth="$MAXWIDTH" \
       -o "${OUTPUT_BASE}.html" "$INPUT"
     echo "  -> ${OUTPUT_BASE}.html"
   fi

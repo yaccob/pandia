@@ -115,6 +115,15 @@ digraph { rankdir=LR; A -> B -> C; }
 $$E = mc^2$$
 ````
 
+## Why "pandia"?
+
+The name is a blend of **Pan**doc and **dia**grams — the two things this tool
+brings together. It also happens to echo the Greek *pan* (all) and *dia* (through),
+which isn't a bad motto for a converter that pushes everything through one pipeline.
+And if you want to get mythological: Pandia was a Greek goddess of the full moon,
+daughter of Zeus and Selene — illuminating things that would otherwise stay in the dark.
+Much like your diagrams before you ran `pandia --all`.
+
 ## How It Works
 
 pandia wraps [Pandoc](https://pandoc.org/) with a custom Lua filter that intercepts

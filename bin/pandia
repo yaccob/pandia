@@ -57,6 +57,7 @@ Options:
   --all              Generate both PDF and HTML
   --watch            Watch for changes and regenerate automatically
   -o, --output NAME  Base name for output files (default: derived from input)
+  --maxwidth WIDTH   Max content width for HTML output (default: 60em)
   --docker           Force Docker mode (skip local tools)
   --local            Force local mode (fail if tools missing)
   -v, --version      Show version
@@ -73,6 +74,7 @@ FORMAT_PDF=false
 FORMAT_HTML=false
 WATCH=false
 OUTPUT_BASE=""
+MAXWIDTH="60em"
 INPUT=""
 FORCE_MODE=""
 
@@ -83,6 +85,7 @@ while [ $# -gt 0 ]; do
     --all)        FORMAT_PDF=true; FORMAT_HTML=true; shift ;;
     --watch)      WATCH=true; shift ;;
     -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
+    --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
     --docker)     FORCE_MODE="docker"; shift ;;
     --local)      FORCE_MODE="local"; shift ;;
     -v|--version) echo "pandia v${VERSION}"; exit 0 ;;
@@ -153,6 +156,9 @@ build_format_flags() {
   if [ -n "$OUTPUT_BASE" ]; then
     flags="$flags -o $OUTPUT_BASE"
   fi
+  if [ "$MAXWIDTH" != "60em" ]; then
+    flags="$flags --maxwidth $MAXWIDTH"
+  fi
   echo "$flags"
 }
 
@@ -179,6 +185,7 @@ run_local() {
       --to=html5 \
       --standalone \
       --mathjax \
+      -V maxwidth="$MAXWIDTH" \
       -o "${OUTPUT_BASE}.html" "$INPUT"
     echo "  -> ${OUTPUT_BASE}.html"
   fi

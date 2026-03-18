@@ -31,6 +31,7 @@ $(HTML): $(SRC) $(FILTER)
 		--to=html5 \
 		--standalone \
 		--mathjax \
+		-V maxwidth=60em \
 		--metadata title="Markdown with Diagrams and Formulas" \
 		-o $@ $<
 
