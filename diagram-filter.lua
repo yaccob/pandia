@@ -82,12 +82,14 @@ local function prepare_graphviz(code, engine)
       cleanup = {infile},
     }
   else
+    local svgfile = basename .. ".svg"
     local outfile = basename .. ".pdf"
     return {
       tool = "graphviz",
       outfile = outfile,
-      cmd = engine .. " -Tpdf -o " .. outfile .. " " .. infile,
-      cleanup = {infile},
+      cmd = engine .. " -Tsvg -o " .. svgfile .. " " .. infile
+        .. " && rsvg-convert -f pdf -o " .. outfile .. " " .. svgfile,
+      cleanup = {infile, svgfile},
     }
   end
 end
