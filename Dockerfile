@@ -3,7 +3,7 @@ FROM alpine:3.21
 LABEL org.opencontainers.image.title="pandia"
 LABEL org.opencontainers.image.description="Markdown to PDF/HTML with PlantUML, Graphviz, Mermaid, Ditaa and LaTeX math"
 LABEL org.opencontainers.image.source="https://github.com/yaccob/pandia"
-LABEL org.opencontainers.image.version="1.2.0"
+LABEL org.opencontainers.image.version="1.2.1"
 LABEL org.opencontainers.image.licenses="MIT"
 
 # Core tools: pandoc, texlive, graphviz, rsvg-convert
