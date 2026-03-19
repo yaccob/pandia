@@ -14,6 +14,7 @@ Options:
   --serve [PORT]        Start HTTP server for rendering (default port: 3300)
   -o, --output NAME     Base name for output files (default: derived from input)
   --maxwidth WIDTH      Max content width for HTML output (default: 60em)
+  --center-math         Center block formulas (default: left-aligned)
   --kroki               Enable Kroki for additional diagram types (uses \$PANDIA_KROKI_URL)
   --kroki-server URL    Enable Kroki with explicit server URL
   -h, --help            Show this help
@@ -35,6 +36,7 @@ SERVE=false
 SERVE_PORT="3300"
 OUTPUT_BASE=""
 MAXWIDTH="60em"
+CENTER_MATH=false
 KROKI_URL=""
 INPUT=""
 
@@ -56,6 +58,7 @@ while [ $# -gt 0 ]; do
                   shift ;;
     -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
     --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
+    --center-math) CENTER_MATH=true; shift ;;
     --kroki)      KROKI_URL="${PANDIA_KROKI_URL:-}"; shift
                   if [ -z "$KROKI_URL" ]; then
                     echo "Error: --kroki requires PANDIA_KROKI_URL to be set." >&2
@@ -116,12 +119,21 @@ if [ -z "$OUTPUT_BASE" ]; then
 fi
 
 generate() {
+  # Math alignment: left-aligned by default, centered with --center-math
+  MATH_PDF_FLAGS=""
+  MATH_HTML_FLAGS=""
+  if [ "$CENTER_MATH" = false ]; then
+    MATH_PDF_FLAGS="-V classoption=fleqn"
+    MATH_HTML_FLAGS="-V header-includes=<script>window.MathJax={chtml:{displayAlign:'left'}};</script>"
+  fi
+
   if [ "$FORMAT_PDF" = true ]; then
     echo "Generating ${OUTPUT_BASE}.pdf ..."
     pandoc $PANDOC_COMMON \
       --to=pdf \
       --pdf-engine=pdflatex \
       -V geometry:margin=2.5cm \
+      $MATH_PDF_FLAGS \
       --standalone \
       -o "${OUTPUT_BASE}.pdf" "$INPUT"
     echo "  -> ${OUTPUT_BASE}.pdf"
@@ -134,6 +146,7 @@ generate() {
       --standalone \
       --mathjax \
       -V maxwidth="$MAXWIDTH" \
+      $MATH_HTML_FLAGS \
       -o "${OUTPUT_BASE}.html" "$INPUT"
     echo "  -> ${OUTPUT_BASE}.html"
   fi

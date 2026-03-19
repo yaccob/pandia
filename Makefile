@@ -23,6 +23,7 @@ $(PDF): $(SRC) $(FILTER)
 		--pdf-engine=pdflatex \
 		-V geometry:margin=2.5cm \
 		-V mainfont="Helvetica" \
+		-V classoption=fleqn \
 		--standalone \
 		-o $@ $<
 
@@ -32,6 +33,7 @@ $(HTML): $(SRC) $(FILTER)
 		--standalone \
 		--mathjax \
 		-V maxwidth=60em \
+		-V "header-includes=<script>window.MathJax={chtml:{displayAlign:'left'}};</script>" \
 		--metadata title="Markdown with Diagrams and Formulas" \
 		-o $@ $<
 
