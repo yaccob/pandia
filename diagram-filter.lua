@@ -154,13 +154,28 @@ local function prepare_tikz(code)
   local texfile = basename .. ".tex"
   local pdffile = basename .. ".pdf"
 
+  -- Extract \usepackage and \usetikzlibrary lines into preamble
+  local preamble = {}
+  local body_lines = {}
+  for line in code:gmatch("[^\n]+") do
+    if line:match("^%s*\\usepackage") or line:match("^%s*\\usetikzlibrary") then
+      table.insert(preamble, line)
+    else
+      table.insert(body_lines, line)
+    end
+  end
+  local body = table.concat(body_lines, "\n")
+
   local doc = "\\documentclass[tikz,border=2pt]{standalone}\n"
-  if not code:match("\\begin{tikzpicture}") then
+  if #preamble > 0 then
+    doc = doc .. table.concat(preamble, "\n") .. "\n"
+  end
+  if not body:match("\\begin{tikzpicture}") then
     doc = doc .. "\\begin{document}\n\\begin{tikzpicture}\n"
-      .. code
+      .. body
       .. "\n\\end{tikzpicture}\n\\end{document}\n"
   else
-    doc = doc .. "\\begin{document}\n" .. code .. "\n\\end{document}\n"
+    doc = doc .. "\\begin{document}\n" .. body .. "\n\\end{document}\n"
   end
 
   local f = io.open(texfile, "w")
