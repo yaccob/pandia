@@ -13,6 +13,35 @@ With `--kroki`, additional diagram types like **BPMN**, **D2**, **ERD**,
 
 ---
 
+## Directory Tree
+
+```dir
+pandia
+  bin
+    pandia
+  diagram-filter.lua
+  Dockerfile
+  entrypoint.sh
+  example.md
+  img/
+  Makefile
+  README.md
+  src
+    core
+      engine.lua
+      parser.lua
+    utils
+      helpers.lua
+      io
+        reader.lua
+        writer.lua
+    init.lua
+  tests
+    test_engine.lua
+  empty-dir/
+  .gitignore
+```
+
 ## PlantUML – Sequence Diagram
 
 ```plantuml

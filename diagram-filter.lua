@@ -207,6 +207,189 @@ local function prepare_tikz(code)
 end
 
 ------------------------------------------------------------------------
+-- Directory tree rendering (SVG for both HTML and PDF)
+------------------------------------------------------------------------
+
+local function render_dir(code)
+  -- Collect non-empty lines
+  local lines = {}
+  for line in code:gmatch("[^\n]*") do
+    if line:match("%S") then
+      table.insert(lines, line)
+    end
+  end
+  if #lines == 0 then return nil, "Empty dir block" end
+
+  -- Baseline indent from first non-empty line
+  local baseline = #(lines[1]:match("^(%s*)"))
+
+  -- Indent unit from first line that is deeper than baseline
+  local indent_unit = nil
+  for i = 2, #lines do
+    local rel = #(lines[i]:match("^(%s*)")) - baseline
+    if rel > 0 then
+      indent_unit = rel
+      break
+    end
+  end
+  indent_unit = indent_unit or 2
+
+  -- Parse entries with level and validation
+  local entries = {}
+  for i, line in ipairs(lines) do
+    local spaces = #(line:match("^(%s*)"))
+    local name = line:match("^%s*(.+)$")
+    local rel = spaces - baseline
+
+    if rel < 0 then
+      return nil, "Line " .. i .. " ('" .. name .. "'): indentation is less than the root"
+    end
+    if rel > 0 and rel % indent_unit ~= 0 then
+      return nil, "Line " .. i .. " ('" .. name .. "'): inconsistent indentation ("
+        .. rel .. " spaces, expected multiple of " .. indent_unit .. ")"
+    end
+
+    local level = (rel > 0) and (rel / indent_unit) or 0
+
+    -- Validate: level can increase by at most 1
+    if #entries > 0 and level > entries[#entries].level + 1 then
+      return nil, "Line " .. i .. " ('" .. name .. "'): indentation jumps by more than one level"
+    end
+
+    table.insert(entries, {name = name, level = level})
+  end
+
+  -- Determine is_dir: has children, or trailing /
+  for i = 1, #entries do
+    entries[i].is_dir = entries[i].name:match("/$") ~= nil
+    if i < #entries and entries[i+1].level > entries[i].level then
+      entries[i].is_dir = true
+    end
+  end
+
+  -- Strip trailing / from display names (after is_dir detection)
+  for i = 1, #entries do
+    entries[i].display = entries[i].name:gsub("/$", "")
+  end
+
+  -- SVG layout constants
+  local font_size = 14
+  local line_height = 18
+  local char_width = 8.4
+  local pad_x = 6
+  local pad_y = 2
+  local trunk_offset = 3     -- trunk x relative to parent text start
+  local connector_len = 14   -- horizontal connector length
+  local connector_gap = 4    -- gap between connector end and text
+  local indent_step = trunk_offset + connector_len + connector_gap
+
+  -- x position of the vertical trunk for children at a given level
+  local function get_trunk_x(child_level)
+    return pad_x + trunk_offset + (child_level - 1) * indent_step
+  end
+
+  -- x position where text starts for a given level
+  local function get_text_x(level)
+    if level == 0 then return pad_x end
+    return get_trunk_x(level) + connector_len + connector_gap
+  end
+
+  -- y center of a row (1-based index), used for connectors
+  local function y_mid(idx)
+    return pad_y + (idx - 0.5) * line_height
+  end
+
+  -- y baseline for text rendering (align text vertically centered in row)
+  local function y_base(idx)
+    return pad_y + (idx - 0.5) * line_height + font_size * 0.35
+  end
+
+  -- y position just below a row's text (start of vertical trunk)
+  local function y_below(idx)
+    return pad_y + idx * line_height
+  end
+
+  -- Collect SVG elements
+  local svg_elems = {}
+  local max_text_end = 0
+
+  -- Text elements
+  for i, entry in ipairs(entries) do
+    local tx = get_text_x(entry.level)
+    local escaped = entry.display:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+    local weight = entry.is_dir and ' font-weight="bold"' or ""
+    table.insert(svg_elems, '<text x="' .. tx .. '" y="' .. y_base(i)
+      .. '"' .. weight .. '>' .. escaped .. '</text>')
+    local text_end = tx + #entry.display * char_width
+    if text_end > max_text_end then max_text_end = text_end end
+  end
+
+  -- Horizontal connectors for non-root entries
+  for i, entry in ipairs(entries) do
+    if entry.level > 0 then
+      local tx = get_trunk_x(entry.level)
+      local ym = y_mid(i)
+      table.insert(svg_elems, '<line x1="' .. tx .. '" y1="' .. ym
+        .. '" x2="' .. (tx + connector_len) .. '" y2="' .. ym .. '"/>')
+    end
+  end
+
+  -- Vertical trunk lines: for each parent, draw from just below
+  -- the parent row down to the last child's y_mid
+  for i, entry in ipairs(entries) do
+    local last_child = nil
+    for j = i + 1, #entries do
+      if entries[j].level <= entry.level then break end
+      if entries[j].level == entry.level + 1 then
+        last_child = j
+      end
+    end
+    if last_child then
+      local tx = get_trunk_x(entry.level + 1)
+      table.insert(svg_elems, '<line x1="' .. tx .. '" y1="' .. y_below(i)
+        .. '" x2="' .. tx .. '" y2="' .. y_mid(last_child) .. '"/>')
+    end
+  end
+
+  -- Assemble SVG
+  local width = math.ceil(max_text_end) + pad_x
+  local height = #entries * line_height + 2 * pad_y
+
+  local svg = {
+    '<svg xmlns="http://www.w3.org/2000/svg"'
+      .. ' width="' .. width .. '" height="' .. height .. '"'
+      .. ' viewBox="0 0 ' .. width .. ' ' .. height .. '">',
+    '<style>'
+      .. 'text { font-family: "Courier New", Courier, monospace;'
+      .. ' font-size: ' .. font_size .. 'px; }'
+      .. ' line { stroke: #000; stroke-width: 1.2; }'
+      .. '</style>',
+  }
+  for _, elem in ipairs(svg_elems) do
+    table.insert(svg, elem)
+  end
+  table.insert(svg, '</svg>')
+  local svg_str = table.concat(svg, "\n")
+
+  if is_html then
+    return pandoc.RawBlock("html", svg_str)
+  else
+    -- Write SVG and convert to PDF via rsvg-convert
+    ensure_imgdir()
+    filecounter = filecounter + 1
+    local basename = imgdir .. "/dir-" .. filecounter
+    local svgfile = basename .. ".svg"
+    local pdffile = basename .. ".pdf"
+    local f = io.open(svgfile, "w")
+    f:write(svg_str)
+    f:close()
+    os.execute("rsvg-convert -f pdf -o " .. pdffile .. " " .. svgfile)
+    os.remove(svgfile)
+    return pandoc.Para{pandoc.Image({}, pdffile)}
+  end
+end
+
+------------------------------------------------------------------------
 -- Kroki rendering: POST diagram source, receive image
 ------------------------------------------------------------------------
 
@@ -265,6 +448,17 @@ local function pass1_CodeBlock(block)
   local caption = block.attributes.caption or ""
 
   local job = nil
+
+  -- Directory tree (pure text, no external tool)
+  if lang == "dir" then
+    detect_format()
+    local result, err = render_dir(block.text)
+    if err then
+      io.stderr:write("pandia dir error: " .. err .. "\n")
+      return pandoc.Para{pandoc.Strong{pandoc.Str("dir error: " .. err)}}
+    end
+    return result
+  end
 
   -- Local tools take priority
   if lang == "plantuml" then
