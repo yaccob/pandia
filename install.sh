@@ -2,7 +2,7 @@
 set -e
 
 REPO="yaccob/pandia"
-VERSION="1.2.1"
+VERSION="1.3.0"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local}"
 
 echo "Installing pandia v${VERSION} ..."

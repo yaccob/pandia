@@ -4,7 +4,7 @@ PDF      := $(SRC:.md=.pdf)
 HTML     := $(SRC:.md=.html)
 IMGDIR   := img
 IMAGE    := yaccob/pandia
-VERSION  := 1.2.1
+VERSION  := 1.3.0
 
 PANDOC_COMMON := --lua-filter=$(FILTER) --from=gfm+tex_math_dollars
 
