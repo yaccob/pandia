@@ -7,7 +7,9 @@ date: 2026-03-17
 # Overview
 
 This document demonstrates embedding **PlantUML**, **Graphviz**, **Mermaid**,
-**Ditaa**, and **LaTeX formulas** in a Markdown document.
+**Ditaa**, **TikZ**, and **LaTeX formulas** in a Markdown document.
+With `--kroki`, additional diagram types like **BPMN**, **D2**, **ERD**,
+**Svgbob**, **WaveDrom**, **Nomnoml**, and **Pikchr** are available.
 
 ---
 
@@ -142,6 +144,176 @@ gantt
 \end{tikzpicture}
 ```
 
+## Kroki-powered Diagrams
+
+The following diagrams are rendered via [Kroki](https://kroki.io) and require
+`--kroki` or `--kroki-server URL`. They are ignored without Kroki enabled.
+
+### BPMN – Business Process
+
+```bpmn
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             id="Definitions_1" targetNamespace="http://example.com">
+  <process id="Process_1" isExecutable="false">
+    <startEvent id="Start" name="Order received"/>
+    <task id="Task1" name="Validate order"/>
+    <exclusiveGateway id="GW1" name="Valid?"/>
+    <task id="Task2" name="Process payment"/>
+    <task id="Task3" name="Reject order"/>
+    <endEvent id="End1" name="Order completed"/>
+    <endEvent id="End2" name="Order rejected"/>
+    <sequenceFlow id="F1" sourceRef="Start" targetRef="Task1"/>
+    <sequenceFlow id="F2" sourceRef="Task1" targetRef="GW1"/>
+    <sequenceFlow id="F3" name="yes" sourceRef="GW1" targetRef="Task2"/>
+    <sequenceFlow id="F4" name="no" sourceRef="GW1" targetRef="Task3"/>
+    <sequenceFlow id="F5" sourceRef="Task2" targetRef="End1"/>
+    <sequenceFlow id="F6" sourceRef="Task3" targetRef="End2"/>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start">
+        <dc:Bounds x="160" y="100" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task1_di" bpmnElement="Task1">
+        <dc:Bounds x="250" y="78" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="GW1_di" bpmnElement="GW1" isMarkerVisible="true">
+        <dc:Bounds x="405" y="93" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task2_di" bpmnElement="Task2">
+        <dc:Bounds x="510" y="20" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task3_di" bpmnElement="Task3">
+        <dc:Bounds x="510" y="150" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End1_di" bpmnElement="End1">
+        <dc:Bounds x="670" y="42" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End2_di" bpmnElement="End2">
+        <dc:Bounds x="670" y="172" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F1_di" bpmnElement="F1">
+        <di:waypoint x="196" y="118"/>
+        <di:waypoint x="250" y="118"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F2_di" bpmnElement="F2">
+        <di:waypoint x="350" y="118"/>
+        <di:waypoint x="405" y="118"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F3_di" bpmnElement="F3">
+        <di:waypoint x="430" y="93"/>
+        <di:waypoint x="430" y="60"/>
+        <di:waypoint x="510" y="60"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F4_di" bpmnElement="F4">
+        <di:waypoint x="430" y="143"/>
+        <di:waypoint x="430" y="190"/>
+        <di:waypoint x="510" y="190"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F5_di" bpmnElement="F5">
+        <di:waypoint x="610" y="60"/>
+        <di:waypoint x="670" y="60"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F6_di" bpmnElement="F6">
+        <di:waypoint x="610" y="190"/>
+        <di:waypoint x="670" y="190"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
+```
+
+### D2 – Declarative Diagrams
+
+```d2
+server: Web Server {
+  handler: Request Handler
+  auth: Auth Middleware
+  db: Database Pool
+}
+
+client: Browser
+cdn: CDN
+
+client -> cdn: Static assets
+client -> server.handler: API requests
+server.handler -> server.auth: Authenticate
+server.auth -> server.db: Query
+```
+
+### Entity Relationship Diagram
+
+```erd
+[Customer]
+*id
+name
+email
+
+[Order]
+*id
+date
+total
+
+[Product]
+*id
+name
+price
+
+Customer 1--* Order
+Order *--* Product
+```
+
+### Svgbob – ASCII Art to SVG
+
+```svgbob
+        .--.            .---.
+       /    \          |     |
+      |  DB  |<------->| API |
+       \    /          |     |
+        '--'            '---'
+          |               |
+          v               v
+        .---.           .---.
+       | Log |         | Web |
+        '---'           '---'
+```
+
+### WaveDrom – Timing Diagram
+
+```wavedrom
+{ "signal": [
+  { "name": "clk",  "wave": "p........." },
+  { "name": "req",  "wave": "0.1..0.1.." },
+  { "name": "ack",  "wave": "0..1.0..1." },
+  { "name": "data", "wave": "x..345x...", "data": ["A", "B", "C"] }
+]}
+```
+
+### Nomnoml – UML Diagrams
+
+```nomnoml
+[<frame>MVC Pattern |
+  [Controller] -> [Model]
+  [Controller] -> [View]
+  [Model] --> [View]
+  [View] --:> [Controller]
+]
+```
+
+### Pikchr – Technical Illustrations
+
+```pikchr
+arrow right 200% "Input" above
+box rad 10px "Process" fit
+arrow right 200% "Output" above
+```
+
+---
+
 ## LaTeX Formulas
 
 ### Inline
@@ -157,15 +329,13 @@ $$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
 Deriving it by completing the square:
 
 $$
-\begin{flalign*}
-& \begin{alignedat}[t]{2}
+\begin{alignedat}{2}
   ax^2 + bx + c &= 0           &\quad&| \div a \\
   x^2 + \frac{b}{a}x &= -\frac{c}{a} &&| + \left(\frac{b}{2a}\right)^2 \\
   \left(x + \frac{b}{2a}\right)^2 &= \frac{b^2 - 4ac}{4a^2} &&| \sqrt{\phantom{x}} \\
   x + \frac{b}{2a} &= \pm\frac{\sqrt{b^2 - 4ac}}{2a} &&| - \frac{b}{2a} \\
   x &= \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
-\end{alignedat} &
-\end{flalign*}
+\end{alignedat}
 $$
 
 The Gaussian integral:
@@ -178,11 +348,18 @@ $$a_{n+1} = \begin{cases} \frac{a_n}{2} & \text{if } a_n \text{ is even} \\ 3a_n
 
 ## Summary
 
-| Feature   | Syntax              | Rendering      |
-|-----------|---------------------|----------------|
-| PlantUML  | `` ```plantuml ``   | via Lua filter |
-| Graphviz  | `` ```graphviz ``   | via Lua filter |
-| Mermaid   | `` ```mermaid ``    | via Lua filter |
-| Ditaa     | `` ```ditaa ``      | via Lua filter |
-| TikZ      | `` ```tikz ``       | via Lua filter |
+| Feature   | Syntax              | Rendering       |
+|-----------|---------------------|-----------------|
+| PlantUML  | `` ```plantuml ``   | Local           |
+| Graphviz  | `` ```graphviz ``   | Local           |
+| Mermaid   | `` ```mermaid ``    | Local           |
+| Ditaa     | `` ```ditaa ``      | Local           |
+| TikZ      | `` ```tikz ``       | Local           |
+| BPMN      | `` ```bpmn ``       | Kroki           |
+| D2        | `` ```d2 ``         | Kroki           |
+| ERD       | `` ```erd ``        | Kroki           |
+| Svgbob    | `` ```svgbob ``     | Kroki           |
+| WaveDrom  | `` ```wavedrom ``   | Kroki           |
+| Nomnoml   | `` ```nomnoml ``    | Kroki           |
+| Pikchr    | `` ```pikchr ``     | Kroki           |
 | LaTeX     | `$...$` / `$$...$$` | Pandoc native  |

@@ -1,5 +1,6 @@
 -- Pandoc Lua filter: renders diagram code blocks to images
--- Supported: plantuml, graphviz/dot, mermaid, ditaa, tikz
+-- Supported locally: plantuml, graphviz/dot, mermaid, ditaa, tikz
+-- With --kroki: additionally all Kroki-supported types (d2, bpmn, etc.)
 -- LaTeX math is handled natively by pandoc
 --
 -- For PDF output: vector graphics (PDF) where possible, PNG only for ditaa
@@ -21,6 +22,26 @@ local mmdc_extra = mmdc_puppeteer and (" -p " .. mmdc_puppeteer) or ""
 
 -- Optional mermaid server (container mode)
 local mermaid_server = os.getenv("MERMAID_SERVER")
+
+-- Kroki server (set via --kroki / --kroki-server)
+local kroki_server = os.getenv("PANDIA_KROKI_URL")
+
+-- Local tool types (rendered without Kroki)
+local local_tools = {
+  plantuml = true, graphviz = true, dot = true,
+  mermaid = true, ditaa = true, tikz = true,
+}
+
+-- All Kroki-supported diagram types
+local kroki_types = {
+  actdiag = true, blockdiag = true, bpmn = true, bytefield = true,
+  c4plantuml = true, d2 = true, dbml = true, ditaa = true,
+  erd = true, excalidraw = true, graphviz = true, dot = true,
+  mermaid = true, nomnoml = true, nwdiag = true, packetdiag = true,
+  pikchr = true, plantuml = true, rackdiag = true, seqdiag = true,
+  structurizr = true, svgbob = true, symbolator = true, tikz = true,
+  vega = true, vegalite = true, wavedrom = true, wireviz = true,
+}
 
 local function ensure_imgdir()
   os.execute("mkdir -p " .. imgdir)
@@ -171,6 +192,53 @@ local function prepare_tikz(code)
 end
 
 ------------------------------------------------------------------------
+-- Kroki rendering: POST diagram source, receive image
+------------------------------------------------------------------------
+
+local function prepare_kroki(code, diagram_type)
+  ensure_imgdir()
+  filecounter = filecounter + 1
+
+  -- Map some aliases to Kroki identifiers
+  local kroki_type = diagram_type
+  if kroki_type == "dot" then kroki_type = "graphviz" end
+
+  local basename = imgdir .. "/kroki-" .. filecounter
+  local infile = basename .. ".txt"
+  local svgfile = basename .. ".svg"
+
+  local f = io.open(infile, "w")
+  f:write(code)
+  f:close()
+
+  -- Always fetch SVG from Kroki (most types only support SVG)
+  local curl_cmd = "curl -sf -X POST"
+    .. " -H 'Content-Type: text/plain'"
+    .. " --data-binary @" .. infile
+    .. " -o " .. svgfile
+    .. " '" .. kroki_server .. "/" .. kroki_type .. "/svg'"
+
+  if is_html then
+    return {
+      tool = "kroki",
+      outfile = svgfile,
+      cmd = curl_cmd,
+      cleanup = {infile},
+    }
+  else
+    -- PDF: fetch SVG, then convert via rsvg-convert
+    local outfile = basename .. ".pdf"
+    return {
+      tool = "kroki",
+      outfile = outfile,
+      cmd = curl_cmd
+        .. " && rsvg-convert -f pdf -o " .. outfile .. " " .. svgfile,
+      cleanup = {infile, svgfile},
+    }
+  end
+end
+
+------------------------------------------------------------------------
 -- Pass 1: collect all diagram blocks, write input files
 ------------------------------------------------------------------------
 
@@ -182,6 +250,8 @@ local function pass1_CodeBlock(block)
   local caption = block.attributes.caption or ""
 
   local job = nil
+
+  -- Local tools take priority
   if lang == "plantuml" then
     job = prepare_plantuml(block.text)
   elseif lang == "graphviz" or lang == "dot" then
@@ -192,6 +262,9 @@ local function pass1_CodeBlock(block)
     job = prepare_ditaa(block.text)
   elseif lang == "tikz" then
     job = prepare_tikz(block.text)
+  elseif kroki_server and kroki_types[lang] then
+    -- Unknown locally but supported by Kroki
+    job = prepare_kroki(block.text, lang)
   end
 
   if not job then return nil end

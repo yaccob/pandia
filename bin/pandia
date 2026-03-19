@@ -52,17 +52,20 @@ pandia v${VERSION} — Markdown to PDF/HTML with diagrams and LaTeX math
 Usage: pandia [OPTIONS] <input.md>
 
 Options:
-  -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
-  --watch            Watch for changes and regenerate automatically
-  --serve [PORT]     Start persistent server (Docker mode, default port: 3300)
-  -o, --output NAME  Base name for output files (default: derived from input)
-  --maxwidth WIDTH   Max content width for HTML output (default: 60em)
-  --docker           Force Docker mode (skip local tools)
-  --local            Force local mode (fail if tools missing)
-  -v, --version      Show version
-  -h, --help         Show this help
+  -t, --to FORMAT       Output format: pdf, html (default: html; repeatable)
+  --watch               Watch for changes and regenerate automatically
+  --serve [PORT]        Start persistent server (Docker mode, default port: 3300)
+  -o, --output NAME     Base name for output files (default: derived from input)
+  --maxwidth WIDTH      Max content width for HTML output (default: 60em)
+  --kroki               Enable Kroki for additional diagram types (uses \$PANDIA_KROKI_URL)
+  --kroki-server URL    Enable Kroki with explicit server URL
+  --docker              Force Docker mode (skip local tools)
+  --local               Force local mode (fail if tools missing)
+  -v, --version         Show version
+  -h, --help            Show this help
 
-Supported diagram types: plantuml, graphviz/dot, mermaid, ditaa, tikz
+Local diagram types: plantuml, graphviz/dot, mermaid, ditaa, tikz
+With Kroki: + bpmn, d2, dbml, erd, excalidraw, nomnoml, svgbob, vega, wavedrom, ...
 LaTeX math: \$...\$ (inline) and \$\$...\$\$ (block)
 EOF
   exit 0
@@ -76,6 +79,7 @@ SERVE=false
 SERVE_PORT="3300"
 OUTPUT_BASE=""
 MAXWIDTH="60em"
+KROKI_URL=""
 INPUT=""
 FORCE_MODE=""
 
@@ -96,6 +100,13 @@ while [ $# -gt 0 ]; do
                   shift ;;
     -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
     --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
+    --kroki)      KROKI_URL="${PANDIA_KROKI_URL:-}"; shift
+                  if [ -z "$KROKI_URL" ]; then
+                    echo "Error: --kroki requires PANDIA_KROKI_URL to be set." >&2
+                    echo "Example: export PANDIA_KROKI_URL=https://kroki.io" >&2
+                    exit 1
+                  fi ;;
+    --kroki-server) KROKI_URL="$2"; shift 2 ;;
     --docker)     FORCE_MODE="docker"; shift ;;
     --local)      FORCE_MODE="local"; shift ;;
     -v|--version) echo "pandia v${VERSION}"; exit 0 ;;
@@ -104,6 +115,11 @@ while [ $# -gt 0 ]; do
     *)            INPUT="$1"; shift ;;
   esac
 done
+
+# Export Kroki URL for Lua filter
+if [ -n "$KROKI_URL" ]; then
+  export PANDIA_KROKI_URL="$KROKI_URL"
+fi
 
 # Handle --serve mode (Docker only, no input file needed)
 if [ "$SERVE" = true ]; then
@@ -181,6 +197,9 @@ build_format_flags() {
   fi
   if [ "$MAXWIDTH" != "60em" ]; then
     flags="$flags --maxwidth $MAXWIDTH"
+  fi
+  if [ -n "$KROKI_URL" ]; then
+    flags="$flags --kroki-server $KROKI_URL"
   fi
   echo "$flags"
 }

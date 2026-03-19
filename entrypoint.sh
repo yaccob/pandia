@@ -9,12 +9,14 @@ usage() {
 Usage: docker run --rm -v "$PWD:/data" yaccob/pandia [OPTIONS] <input.md>
 
 Options:
-  -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
-  --watch            Watch for changes and regenerate automatically
-  --serve [PORT]     Start HTTP server for rendering (default port: 3300)
-  -o, --output NAME  Base name for output files (default: derived from input)
-  --maxwidth WIDTH   Max content width for HTML output (default: 60em)
-  -h, --help         Show this help
+  -t, --to FORMAT       Output format: pdf, html (default: html; repeatable)
+  --watch               Watch for changes and regenerate automatically
+  --serve [PORT]        Start HTTP server for rendering (default port: 3300)
+  -o, --output NAME     Base name for output files (default: derived from input)
+  --maxwidth WIDTH      Max content width for HTML output (default: 60em)
+  --kroki               Enable Kroki for additional diagram types (uses \$PANDIA_KROKI_URL)
+  --kroki-server URL    Enable Kroki with explicit server URL
+  -h, --help            Show this help
 
 Examples:
   docker run --rm -v "$PWD:/data" yaccob/pandia example.md
@@ -33,6 +35,7 @@ SERVE=false
 SERVE_PORT="3300"
 OUTPUT_BASE=""
 MAXWIDTH="60em"
+KROKI_URL=""
 INPUT=""
 
 # Parse arguments
@@ -53,11 +56,22 @@ while [ $# -gt 0 ]; do
                   shift ;;
     -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
     --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
+    --kroki)      KROKI_URL="${PANDIA_KROKI_URL:-}"; shift
+                  if [ -z "$KROKI_URL" ]; then
+                    echo "Error: --kroki requires PANDIA_KROKI_URL to be set." >&2
+                    exit 1
+                  fi ;;
+    --kroki-server) KROKI_URL="$2"; shift 2 ;;
     -h|--help)    usage ;;
     -*)           echo "Unknown option: $1" >&2; usage ;;
     *)           INPUT="$1"; shift ;;
   esac
 done
+
+# Export Kroki URL for Lua filter
+if [ -n "$KROKI_URL" ]; then
+  export PANDIA_KROKI_URL="$KROKI_URL"
+fi
 
 # Handle --serve mode (no input file needed)
 if [ "$SERVE" = true ]; then

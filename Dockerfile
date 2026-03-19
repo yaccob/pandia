@@ -25,7 +25,8 @@ RUN apk add --no-cache \
     font-noto \
     nodejs \
     npm \
-    wget
+    wget \
+    curl
 
 # PlantUML
 RUN mkdir -p /opt/plantuml && \
