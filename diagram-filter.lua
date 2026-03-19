@@ -154,7 +154,7 @@ local function prepare_tikz(code)
       tool = "tikz",
       outfile = pngfile,
       cmd = compile
-        .. " && gs -sDEVICE=pngalpha -r300 -dNOPAUSE -dBATCH -dQUIET"
+        .. "; gs -sDEVICE=pngalpha -r300 -dNOPAUSE -dBATCH -dQUIET"
         .. " -sOutputFile=" .. pngfile .. " " .. pdffile .. " 2>/dev/null",
       cleanup = cleanup,
     }
