@@ -24,6 +24,10 @@ Examples:
   docker run --rm -v "$PWD:/data" yaccob/pandia -t pdf -t html example.md
   docker run --rm -v "$PWD:/data" yaccob/pandia --watch -t pdf example.md
   docker run -d -p 3300:3300 -v "$PWD:/data" --name pandia yaccob/pandia --serve
+
+Supported diagram types: plantuml, graphviz/dot, mermaid, ditaa, tikz, dir
+With Kroki: + bpmn, d2, dbml, erd, excalidraw, nomnoml, svgbob, vega, wavedrom, ...
+LaTeX math: \$...\$ (inline) and \$\$...\$\$ (block)
 EOF
   exit 0
 }

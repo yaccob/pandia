@@ -383,8 +383,12 @@ local function render_dir(code)
     local f = io.open(svgfile, "w")
     f:write(svg_str)
     f:close()
-    os.execute("rsvg-convert -f pdf -o " .. pdffile .. " " .. svgfile)
+    local ok = os.execute("rsvg-convert -f pdf -o " .. pdffile .. " " .. svgfile)
     os.remove(svgfile)
+    if not ok then
+      io.stderr:write("pandia dir error: rsvg-convert failed for " .. pdffile .. "\n")
+      return pandoc.Para{pandoc.Strong{pandoc.Str("dir error: rsvg-convert failed")}}
+    end
     return pandoc.Para{pandoc.Image({}, pdffile)}
   end
 end
