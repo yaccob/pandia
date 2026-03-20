@@ -12,6 +12,7 @@ All diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zoo
 | Mermaid    | `` ```mermaid ``    | Vector (PDF/SVG)       |
 | Ditaa      | `` ```ditaa ``      | Raster (PNG)           |
 | TikZ       | `` ```tikz ``       | Vector (PDF), PNG in HTML |
+| Dir Tree   | `` ```dir ``        | Vector (SVG)           |
 | LaTeX Math | `$...$` / `$$...$$` | Native (Pandoc)        |
 
 ## Installation
@@ -29,7 +30,7 @@ This installs `pandia` and all required tools (Pandoc, PlantUML, Graphviz, Merma
 ### Manual Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yaccob/pandia/v1.3.0/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/yaccob/pandia/v1.4.0/install.sh | sh
 ```
 
 Installs the `pandia` script to `~/.local/bin`. You still need either:
@@ -40,7 +41,7 @@ Installs the `pandia` script to `~/.local/bin`. You still need either:
 
 ```bash
 docker pull yaccob/pandia
-docker run --rm -v "$PWD:/data" yaccob/pandia --all myfile.md
+docker run --rm -v "$PWD:/data" yaccob/pandia -t pdf -t html myfile.md
 ```
 
 ## Usage
@@ -115,7 +116,28 @@ digraph { rankdir=LR; A -> B -> C; }
 ## Formula
 
 $$E = mc^2$$
+
+## Directory Tree
+
+```dir
+my-project
+  src
+    index.ts
+    utils.ts
+  tests/
+  README.md
+```
 ````
+
+### Directory Tree Syntax
+
+The `dir` block renders directory trees as SVG graphics. The syntax is plain
+indented text — no special characters needed:
+
+- **Indentation** defines the hierarchy (consistent spaces per level)
+- **Trailing `/`** marks a directory (displayed in bold, slash stripped from output)
+- Entries with children are automatically detected as directories
+- The root entry (first line, no indentation) is always bold
 
 ## Why "pandia"?
 
@@ -129,7 +151,7 @@ Much like your diagrams before you ran `pandia --all`.
 ## How It Works
 
 pandia wraps [Pandoc](https://pandoc.org/) with a custom Lua filter that intercepts
-`plantuml`, `graphviz`, `mermaid`, `ditaa`, and `tikz` code blocks, renders them via their
+`plantuml`, `graphviz`, `mermaid`, `ditaa`, `tikz`, and `dir` code blocks, renders them via their
 respective CLI tools (or `pdflatex` for TikZ), and passes the results back to Pandoc for PDF or HTML output.
 
 - **Local mode:** Calls tools directly — fast, no overhead

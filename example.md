@@ -7,13 +7,18 @@ date: 2026-03-17
 # Overview
 
 This document demonstrates embedding **PlantUML**, **Graphviz**, **Mermaid**,
-**Ditaa**, **TikZ**, and **LaTeX formulas** in a Markdown document.
+**Ditaa**, **TikZ**, **Directory Trees**, and **LaTeX formulas** in a Markdown document.
 With `--kroki`, additional diagram types like **BPMN**, **D2**, **ERD**,
 **Svgbob**, **WaveDrom**, **Nomnoml**, and **Pikchr** are available.
 
 ---
 
 ## Directory Tree
+
+A `` ```dir `` block renders a directory tree as an SVG graphic.
+The hierarchy is defined purely by indentation — no special characters needed.
+Directories are detected automatically (when they have children) or marked
+explicitly with a trailing `/`. They are rendered in **bold**.
 
 ```dir
 pandia
@@ -463,6 +468,7 @@ $$a_{n+1} = \begin{cases} \frac{a_n}{2} & \text{if } a_n \text{ is even} \\ 3a_n
 | Mermaid   | `` ```mermaid ``    | Local           |
 | Ditaa     | `` ```ditaa ``      | Local           |
 | TikZ      | `` ```tikz ``       | Local           |
+| Dir Tree  | `` ```dir ``        | Local (SVG)     |
 | BPMN      | `` ```bpmn ``       | Kroki           |
 | D2        | `` ```d2 ``         | Kroki           |
 | DBML      | `` ```dbml ``       | Kroki           |
