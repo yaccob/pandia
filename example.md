@@ -6,8 +6,9 @@ date: 2026-03-17
 
 # Overview
 
-This document demonstrates embedding **PlantUML**, **Graphviz**, **Mermaid**,
-**Ditaa**, **TikZ**, **Directory Trees**, and **LaTeX formulas** in a Markdown document.
+This document demonstrates embedding **PlantUML** (including **EBNF**),
+**Graphviz**, **Mermaid**, **Ditaa**, **TikZ**, **Directory Trees**,
+and **LaTeX formulas** in a Markdown document.
 With `--kroki`, additional diagram types like **BPMN**, **D2**, **ERD**,
 **Svgbob**, **WaveDrom**, **Nomnoml**, and **Pikchr** are available.
 
@@ -50,7 +51,6 @@ pandia
 ## PlantUML – Sequence Diagram
 
 ```plantuml
-@startuml
 actor User
 participant "Frontend" as FE
 participant "Backend" as BE
@@ -62,7 +62,6 @@ BE -> DB : Query
 DB --> BE : Result
 BE --> FE : JSON
 FE --> User : Display
-@enduml
 ```
 
 ## PlantUML – Class Diagram
@@ -81,6 +80,47 @@ class Motorcycle extends Vehicle {
   +helmetRequired: boolean
 }
 @enduml
+```
+
+## PlantUML – EBNF Syntax Diagram (SQL SELECT)
+
+```plantuml
+@startebnf
+title SQL SELECT Statement
+
+select = "SELECT" , [ "DISTINCT" | "ALL" ] ,
+         select_list ,
+         "FROM" , table_reference , { "," , table_reference } ,
+         [ where_clause ] ,
+         [ group_by_clause ] ,
+         [ having_clause ] ,
+         [ order_by_clause ] ,
+         [ limit_clause ] ;
+
+select_list = "*"
+            | select_item , { "," , select_item } ;
+
+select_item = expression , [ [ "AS" ] , alias ] ;
+
+table_reference = table_name , [ [ "AS" ] , alias ]
+                | join_clause ;
+
+join_clause = table_reference ,
+              ( "INNER" | "LEFT" | "RIGHT" | "FULL" ) , "JOIN" ,
+              table_reference , "ON" , expression ;
+
+where_clause = "WHERE" , expression ;
+
+group_by_clause = "GROUP BY" , expression , { "," , expression } ;
+
+having_clause = "HAVING" , expression ;
+
+order_by_clause = "ORDER BY" , sort_item , { "," , sort_item } ;
+
+sort_item = expression , [ "ASC" | "DESC" ] ;
+
+limit_clause = "LIMIT" , integer , [ "OFFSET" , integer ] ;
+@endebnf
 ```
 
 ## Graphviz – Directed Graph

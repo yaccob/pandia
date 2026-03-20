@@ -57,6 +57,11 @@ end
 ------------------------------------------------------------------------
 
 local function prepare_plantuml(code)
+  -- Wrap in @startuml/@enduml if no @start tag present
+  if not code:match("^%s*@start") then
+    code = "@startuml\n" .. code .. "\n@enduml"
+  end
+
   ensure_imgdir()
   filecounter = filecounter + 1
   local basename = imgdir .. "/plantuml-" .. filecounter

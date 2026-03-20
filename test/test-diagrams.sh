@@ -20,6 +20,34 @@ Alice -> Bob: hello
 }
 test_plantuml_basic
 
+test_plantuml_without_startuml() {
+  local input='```plantuml
+actor User
+participant "Backend" as BE
+User -> BE : Request
+BE --> User : Response
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  assert_contains "$out" "<img" "PlantUML without @startuml wrapper renders"
+  assert_contains "$out" ".svg" "PlantUML without @startuml produces SVG"
+}
+test_plantuml_without_startuml
+
+test_plantuml_ebnf() {
+  local input='```plantuml
+@startebnf
+expr = term , { ("+" | "-") , term } ;
+term = factor , { ("*" | "/") , factor } ;
+factor = number | "(" , expr , ")" ;
+@endebnf
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  assert_contains "$out" "<img" "PlantUML EBNF generates image"
+}
+test_plantuml_ebnf
+
 section "plantuml: error cases"
 
 test_plantuml_invalid_syntax() {
