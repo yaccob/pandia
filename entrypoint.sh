@@ -89,7 +89,8 @@ fi
 
 if [ -z "$INPUT" ]; then
   echo "Error: No input file specified." >&2
-  usage
+  echo "Run with --help for usage." >&2
+  exit 1
 fi
 
 if [ ! -f "$INPUT" ]; then

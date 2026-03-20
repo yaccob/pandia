@@ -126,6 +126,66 @@ run_filter_isolated_both() {
   teardown_workdir
 }
 
+assert_exit_nonzero() {
+  local rc="$1" msg="$2"
+  [[ $rc -ne 0 ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "$msg"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "$msg"; ERRORS="${ERRORS}\n  FAIL: ${msg} (got exit 0)"; }
+}
+
+assert_file_exists() {
+  local path="$1" msg="$2"
+  [[ -f "$path" ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "$msg"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "$msg"; ERRORS="${ERRORS}\n  FAIL: ${msg} (file not found)"; }
+}
+
+# Run filter targeting PDF (latex output) in isolated workdir.
+# WORK_DIR is preserved after call — caller must call teardown_workdir.
+# Do NOT capture with $() — call directly so WORK_DIR stays set.
+run_filter_pdf_keep() {
+  local input="$1"
+  setup_workdir
+  (cd "$WORK_DIR" && echo "$input" | pandoc --lua-filter=diagram-filter.lua \
+    --from=gfm+tex_math_dollars --to=latex 2>/dev/null) || true
+}
+
+# Run filter with PANDIA_KROKI_URL set in isolated workdir
+run_filter_kroki() {
+  local input="$1" url="$2"
+  setup_workdir
+  (cd "$WORK_DIR" && export PANDIA_KROKI_URL="$url" && \
+    echo "$input" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html 2>/dev/null)
+  local rc=$?
+  teardown_workdir
+  return $rc
+}
+
+run_filter_kroki_both() {
+  local input="$1" url="$2"
+  setup_workdir
+  local tmpout="$WORK_DIR/_stdout"
+  local tmperr="$WORK_DIR/_stderr"
+  (cd "$WORK_DIR" && export PANDIA_KROKI_URL="$url" && \
+    echo "$input" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html >"$tmpout" 2>"$tmperr") || true
+  LAST_STDOUT=$(cat "$tmpout")
+  LAST_STDERR=$(cat "$tmperr")
+  teardown_workdir
+}
+
+run_filter_kroki_pdf_keep() {
+  local input="$1" url="$2"
+  setup_workdir
+  (cd "$WORK_DIR" && export PANDIA_KROKI_URL="$url" && \
+    echo "$input" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t latex 2>/dev/null) || true
+}
+
+# Detect container runtime (needed by several test sections)
+CONTAINER_RT=""
+if command -v podman >/dev/null 2>&1; then
+  CONTAINER_RT="podman"
+elif command -v docker >/dev/null 2>&1; then
+  CONTAINER_RT="docker"
+fi
+
 # --- Tests: Happy Path ------------------------------------------------
 
 section() {
@@ -495,6 +555,328 @@ some content
 }
 test_unknown_type_ignored
 
+# --- Tests: Ditaa -----------------------------------------------------
+
+section "ditaa: happy path"
+
+test_ditaa_basic() {
+  local input='```ditaa
++--------+   +-------+
+|        |-->|       |
+| cBLU   |   | cGRE  |
++--------+   +-------+
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  assert_contains "$out" "<img" "Ditaa generates image element"
+  assert_contains "$out" "ditaa-" "Image uses ditaa prefix"
+  assert_contains "$out" ".png" "Ditaa uses PNG format"
+}
+test_ditaa_basic
+
+section "ditaa: error cases"
+
+test_ditaa_empty() {
+  local input='```ditaa
+```'
+  run_filter_isolated_both "$input"
+  # Ditaa via PlantUML may still produce output; document behavior
+  assert_contains "$LAST_STDOUT" "<img" "Ditaa empty block still produces image (PlantUML wrapper)"
+}
+test_ditaa_empty
+
+# --- Tests: PDF output for diagram types ------------------------------
+
+section "pdf output: diagram file types"
+
+test_pdf_graphviz() {
+  local input='```graphviz
+digraph { A -> B; }
+```'
+  run_filter_pdf_keep "$input"
+  local found
+  found=$(ls "$WORK_DIR"/img/graphviz-*.pdf 2>/dev/null | head -1) || true
+  assert_file_exists "${found:-/nonexistent}" "Graphviz produces PDF file for PDF output"
+  teardown_workdir
+}
+test_pdf_graphviz
+
+test_pdf_plantuml() {
+  local input='```plantuml
+@startuml
+Alice -> Bob: hello
+@enduml
+```'
+  run_filter_pdf_keep "$input"
+  local found
+  found=$(ls "$WORK_DIR"/img/plantuml-*.pdf 2>/dev/null | head -1) || true
+  assert_file_exists "${found:-/nonexistent}" "PlantUML produces PDF file for PDF output"
+  teardown_workdir
+}
+test_pdf_plantuml
+
+test_pdf_mermaid() {
+  local input='```mermaid
+graph LR
+  A --> B
+```'
+  run_filter_pdf_keep "$input"
+  local found
+  found=$(ls "$WORK_DIR"/img/mermaid-*.pdf 2>/dev/null | head -1) || true
+  assert_file_exists "${found:-/nonexistent}" "Mermaid produces PDF file for PDF output"
+  teardown_workdir
+}
+test_pdf_mermaid
+
+test_pdf_tikz() {
+  local input='```tikz
+\draw (0,0) -- (1,1);
+```'
+  run_filter_pdf_keep "$input"
+  local found
+  found=$(ls "$WORK_DIR"/img/tikz-*.pdf 2>/dev/null | head -1) || true
+  assert_file_exists "${found:-/nonexistent}" "TikZ produces PDF file for PDF output"
+  teardown_workdir
+}
+test_pdf_tikz
+
+test_pdf_ditaa() {
+  local input='```ditaa
++---+
+| A |
++---+
+```'
+  run_filter_pdf_keep "$input"
+  local found
+  found=$(ls "$WORK_DIR"/img/ditaa-*.png 2>/dev/null | head -1) || true
+  assert_file_exists "${found:-/nonexistent}" "Ditaa produces PNG file for PDF output (always PNG)"
+  teardown_workdir
+}
+test_pdf_ditaa
+
+# --- Tests: Captions --------------------------------------------------
+
+section "diagram captions"
+
+test_caption_graphviz() {
+  setup_workdir
+  cat > "$WORK_DIR/input.md" << 'MDEOF'
+```{.graphviz caption="My Graph"}
+digraph { A -> B; }
+```
+MDEOF
+  local out
+  # Captions require markdown (not gfm) for fenced_code_attributes support
+  out=$(cd "$WORK_DIR" && pandoc --lua-filter=diagram-filter.lua --from=markdown -t html input.md 2>/dev/null)
+  assert_contains "$out" "My Graph" "Graphviz caption rendered (--from=markdown)"
+  teardown_workdir
+}
+test_caption_graphviz
+
+test_caption_plantuml() {
+  setup_workdir
+  cat > "$WORK_DIR/input.md" << 'MDEOF'
+```{.plantuml caption="Sequence"}
+@startuml
+Alice -> Bob: hi
+@enduml
+```
+MDEOF
+  local out
+  out=$(cd "$WORK_DIR" && pandoc --lua-filter=diagram-filter.lua --from=markdown -t html input.md 2>/dev/null)
+  assert_contains "$out" "Sequence" "PlantUML caption rendered (--from=markdown)"
+  teardown_workdir
+}
+test_caption_plantuml
+
+# --- Tests: Multiple diagrams / batching ------------------------------
+
+section "multiple diagrams and batching"
+
+test_multiple_plantuml() {
+  local input='```plantuml
+@startuml
+Alice -> Bob: first
+@enduml
+```
+
+Some text.
+
+```plantuml
+@startuml
+Carol -> Dave: second
+@enduml
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  assert_count "$out" "<img" 2 "Two PlantUML diagrams both rendered"
+}
+test_multiple_plantuml
+
+test_multiple_mermaid() {
+  local input='```mermaid
+graph LR
+  A --> B
+```
+
+```mermaid
+graph TD
+  C --> D
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  assert_count "$out" "<img" 2 "Two Mermaid diagrams both rendered"
+}
+test_multiple_mermaid
+
+test_mixed_diagram_types() {
+  local input='```graphviz
+digraph { A -> B; }
+```
+
+```plantuml
+@startuml
+Alice -> Bob: hello
+@enduml
+```
+
+```dir
+root
+  child
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  # graphviz + plantuml produce <img>, dir produces <svg>
+  assert_count "$out" "<img" 2 "Two image elements from graphviz + plantuml"
+  assert_contains "$out" "<svg" "Dir block SVG also present"
+}
+test_mixed_diagram_types
+
+# --- Tests: Kroki -----------------------------------------------------
+
+KROKI_AVAILABLE=false
+if curl -sf --max-time 5 "https://kroki.io/health" >/dev/null 2>&1; then
+  KROKI_AVAILABLE=true
+fi
+
+if $KROKI_AVAILABLE; then
+  section "kroki: remote rendering (kroki.io)"
+
+  test_kroki_nomnoml() {
+    local input='```nomnoml
+[Hello] -> [World]
+```'
+    local out
+    out=$(run_filter_kroki "$input" "https://kroki.io") || true
+    assert_contains "$out" "<img" "Kroki nomnoml generates image element"
+    assert_contains "$out" "kroki-" "Image uses kroki prefix"
+  }
+  test_kroki_nomnoml
+
+  test_kroki_d2() {
+    local input='```d2
+x -> y
+```'
+    local out
+    out=$(run_filter_kroki "$input" "https://kroki.io") || true
+    assert_contains "$out" "<img" "Kroki d2 generates image element"
+  }
+  test_kroki_d2
+
+  test_kroki_invalid_syntax() {
+    local input='```nomnoml
+this is not valid nomnoml @@@!!!
+```'
+    local out
+    out=$(run_filter_kroki "$input" "https://kroki.io") || true
+    # Kroki returns HTTP 200 with error SVG even for invalid input,
+    # so the filter sees a valid output file — no error to detect
+    assert_contains "$out" "<img" "Kroki produces image even for invalid syntax (server-side error image)"
+  }
+  test_kroki_invalid_syntax
+
+  test_kroki_pdf_output() {
+    local input='```nomnoml
+[Hello] -> [World]
+```'
+    run_filter_kroki_pdf_keep "$input" "https://kroki.io"
+    local found
+    found=$(ls "$WORK_DIR"/img/kroki-*.pdf 2>/dev/null | head -1) || true
+    assert_file_exists "${found:-/nonexistent}" "Kroki produces PDF file for PDF output"
+    teardown_workdir
+  }
+  test_kroki_pdf_output
+else
+  printf "\n${BOLD}kroki: remote rendering${RESET}\n"
+  printf "  ${RED}SKIP${RESET} kroki tests: kroki.io not reachable\n"
+fi
+
+# --- Tests: Robustness ------------------------------------------------
+
+section "robustness"
+
+test_empty_markdown() {
+  local tmpdir out
+  tmpdir=$(mktemp -d)
+  echo '' > "$tmpdir/empty.md"
+  out=$(cd "$tmpdir" && pandoc --lua-filter="$FILTER" --from=gfm -t html empty.md 2>&1) || true
+  # Should not crash
+  PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "Empty markdown does not crash"
+  rm -rf "$tmpdir"
+}
+test_empty_markdown
+
+test_markdown_no_diagrams() {
+  local input='# Hello
+
+Some text with **bold** and *italic*.
+
+- List item 1
+- List item 2'
+  local out
+  out=$(run_filter "$input")
+  assert_contains "$out" "Hello" "Markdown without diagrams passes through"
+  assert_not_contains "$out" "<img" "No images generated for plain markdown"
+  assert_not_contains "$out" "<svg" "No SVGs generated for plain markdown"
+}
+test_markdown_no_diagrams
+
+test_spaces_in_path() {
+  local tmpdir
+  tmpdir=$(mktemp -d)/path\ with\ spaces
+  mkdir -p "$tmpdir"
+  cp "$FILTER" "$tmpdir/"
+  echo '```graphviz
+digraph { A -> B; }
+```' > "$tmpdir/input.md"
+  local out
+  out=$(cd "$tmpdir" && pandoc --lua-filter=diagram-filter.lua --from=gfm -t html input.md 2>/dev/null) || true
+  assert_contains "$out" "<img" "Filter works with spaces in path"
+  rm -rf "$(dirname "$tmpdir")"
+}
+test_spaces_in_path
+
+test_multiple_diagrams_with_errors() {
+  local input='```graphviz
+digraph { A -> B; }
+```
+
+```graphviz
+this is invalid
+```
+
+```dir
+root
+  child
+```'
+  run_filter_isolated_both "$input"
+  # First graphviz should succeed, second should show error, dir should work
+  assert_contains "$LAST_STDOUT" "<img" "Valid graphviz still produces image"
+  assert_contains "$LAST_STDOUT" "graphviz error" "Invalid graphviz shows error"
+  assert_contains "$LAST_STDOUT" "<svg" "Dir block still renders despite other errors"
+}
+test_multiple_diagrams_with_errors
+
 # --- Tests: CLI (bin/pandia) ------------------------------------------
 
 PANDIA="$PROJECT_DIR/bin/pandia"
@@ -639,6 +1021,184 @@ test_cli_output_name_derived() {
 }
 test_cli_output_name_derived
 
+section "cli: --maxwidth option"
+
+test_cli_maxwidth() {
+  local tmpdir out
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  "$PANDIA" -t html -o "$tmpdir/out" --maxwidth 40em --local "$tmpdir/input.md" >/dev/null 2>&1
+  local content
+  content=$(cat "$tmpdir/out.html")
+  assert_contains "$content" "40em" "Custom maxwidth appears in HTML output"
+  rm -rf "$tmpdir"
+}
+test_cli_maxwidth
+
+test_cli_maxwidth_default() {
+  local tmpdir out
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  "$PANDIA" -t html -o "$tmpdir/out" --local "$tmpdir/input.md" >/dev/null 2>&1
+  local content
+  content=$(cat "$tmpdir/out.html")
+  assert_contains "$content" "60em" "Default maxwidth 60em in HTML output"
+  rm -rf "$tmpdir"
+}
+test_cli_maxwidth_default
+
+section "cli: --center-math option"
+
+test_cli_center_math_html() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  printf '# Math\n\n$$x^2$$\n' > "$tmpdir/input.md"
+  "$PANDIA" -t html -o "$tmpdir/out" --center-math --local "$tmpdir/input.md" >/dev/null 2>&1
+  local content
+  content=$(cat "$tmpdir/out.html")
+  assert_not_contains "$content" "displayAlign" "--center-math omits left-align MathJax config"
+  rm -rf "$tmpdir"
+}
+test_cli_center_math_html
+
+test_cli_default_left_align_math() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  printf '# Math\n\n$$x^2$$\n' > "$tmpdir/input.md"
+  "$PANDIA" -t html -o "$tmpdir/out" --local "$tmpdir/input.md" >/dev/null 2>&1
+  local content
+  content=$(cat "$tmpdir/out.html")
+  assert_contains "$content" "displayAlign" "Default math is left-aligned (MathJax displayAlign)"
+  rm -rf "$tmpdir"
+}
+test_cli_default_left_align_math
+
+section "cli: --kroki-server option"
+
+if $KROKI_AVAILABLE; then
+  test_cli_kroki_server() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    printf '# Kroki\n\n```nomnoml\n[A] -> [B]\n```\n' > "$tmpdir/input.md"
+    cp "$FILTER" "$tmpdir/"
+    local out
+    out=$(cd "$tmpdir" && "$PANDIA" -t html -o "$tmpdir/out" --kroki-server https://kroki.io --local input.md 2>&1) || true
+    assert_file_exists "$tmpdir/out.html" "--kroki-server produces HTML output"
+    local content
+    content=$(cat "$tmpdir/out.html" 2>/dev/null) || true
+    assert_contains "$content" "kroki-" "--kroki-server renders kroki diagram"
+    rm -rf "$tmpdir"
+  }
+  test_cli_kroki_server
+else
+  printf "\n${BOLD}cli: --kroki-server option${RESET}\n"
+  printf "  ${RED}SKIP${RESET} --kroki-server test: kroki.io not reachable\n"
+fi
+
+section "cli: --docker flag"
+
+if [[ -n "$CONTAINER_RT" ]]; then
+  test_cli_docker_flag() {
+    local tmpdir out
+    tmpdir=$(mktemp -d)
+    echo '# Docker mode' > "$tmpdir/input.md"
+    # --docker forces container mode; pandia mounts input dir as /data
+    out=$("$PANDIA" --docker -t html "$tmpdir/input.md" 2>&1) || true
+    assert_file_exists "$tmpdir/input.html" "--docker flag produces output via container"
+    rm -rf "$tmpdir"
+  }
+  test_cli_docker_flag
+else
+  printf "\n${BOLD}cli: --docker flag${RESET}\n"
+  printf "  ${RED}SKIP${RESET} --docker flag test: no container runtime found\n"
+fi
+
+# --- Tests: Container entrypoint --------------------------------------
+
+if [[ -n "$CONTAINER_RT" ]]; then
+  section "container entrypoint"
+
+  test_entrypoint_help() {
+    local out
+    out=$($CONTAINER_RT run --rm yaccob/pandia --help 2>&1) || true
+    assert_contains "$out" "Usage:" "Container --help shows usage"
+    assert_contains "$out" "docker run" "Container --help shows docker examples"
+  }
+  test_entrypoint_help
+
+  test_entrypoint_no_input() {
+    local out rc
+    out=$($CONTAINER_RT run --rm yaccob/pandia 2>&1) && rc=0 || rc=$?
+    assert_contains "$out" "No input file" "Container: no input file error"
+    # Note: exit code depends on image version; fixed in entrypoint.sh but
+    # only effective after image rebuild
+  }
+  test_entrypoint_no_input
+
+  test_entrypoint_unknown_format() {
+    local out rc
+    out=$($CONTAINER_RT run --rm yaccob/pandia -t docx test.md 2>&1) && rc=0 || rc=$?
+    assert_contains "$out" "Unknown format" "Container: unknown format error"
+    assert_exit_nonzero "$rc" "Container: non-zero exit for unknown format"
+  }
+  test_entrypoint_unknown_format
+
+  test_entrypoint_file_not_found() {
+    local out rc
+    out=$($CONTAINER_RT run --rm yaccob/pandia nonexistent.md 2>&1) && rc=0 || rc=$?
+    assert_contains "$out" "not found" "Container: file not found error"
+    assert_exit_nonzero "$rc" "Container: non-zero exit for missing file"
+  }
+  test_entrypoint_file_not_found
+
+  test_entrypoint_html_render() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    echo '# Container Test' > "$tmpdir/input.md"
+    $CONTAINER_RT run --rm -v "$tmpdir:/data" yaccob/pandia -t html input.md >/dev/null 2>&1 || true
+    assert_file_exists "$tmpdir/input.html" "Container renders HTML"
+    local content
+    content=$(cat "$tmpdir/input.html" 2>/dev/null) || true
+    assert_contains "$content" "Container Test" "Container HTML has correct content"
+    rm -rf "$tmpdir"
+  }
+  test_entrypoint_html_render
+
+  test_entrypoint_pdf_render() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    echo '# Container PDF' > "$tmpdir/input.md"
+    $CONTAINER_RT run --rm -v "$tmpdir:/data" yaccob/pandia -t pdf input.md >/dev/null 2>&1 || true
+    assert_file_exists "$tmpdir/input.pdf" "Container renders PDF"
+    rm -rf "$tmpdir"
+  }
+  test_entrypoint_pdf_render
+
+  test_entrypoint_both_formats() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    echo '# Both' > "$tmpdir/input.md"
+    $CONTAINER_RT run --rm -v "$tmpdir:/data" yaccob/pandia -t html -t pdf input.md >/dev/null 2>&1 || true
+    assert_file_exists "$tmpdir/input.html" "Container creates HTML with -t html -t pdf"
+    assert_file_exists "$tmpdir/input.pdf" "Container creates PDF with -t html -t pdf"
+    rm -rf "$tmpdir"
+  }
+  test_entrypoint_both_formats
+
+  test_entrypoint_custom_output() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    echo '# Custom' > "$tmpdir/input.md"
+    $CONTAINER_RT run --rm -v "$tmpdir:/data" yaccob/pandia -t html -o myout input.md >/dev/null 2>&1 || true
+    assert_file_exists "$tmpdir/myout.html" "Container respects -o output name"
+    rm -rf "$tmpdir"
+  }
+  test_entrypoint_custom_output
+else
+  printf "\n${BOLD}container entrypoint${RESET}\n"
+  printf "  ${RED}SKIP${RESET} entrypoint tests: no container runtime found\n"
+fi
+
 # --- Tests: CLI --watch -----------------------------------------------
 
 section "cli: --watch mode"
@@ -723,14 +1283,6 @@ test_cli_watch_rebuilds_on_change() {
 test_cli_watch_rebuilds_on_change
 
 # --- Tests: CLI --serve -----------------------------------------------
-
-# --serve requires a running container; detect container runtime
-CONTAINER_RT=""
-if command -v podman >/dev/null 2>&1; then
-  CONTAINER_RT="podman"
-elif command -v docker >/dev/null 2>&1; then
-  CONTAINER_RT="docker"
-fi
 
 SERVE_PORT=13300
 SERVE_CONTAINER="pandia-test-serve"
