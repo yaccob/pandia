@@ -183,7 +183,7 @@ local function prepare_tikz(code)
   f:close()
 
   local compile = "pdflatex -interaction=nonstopmode -output-directory=" .. imgdir
-    .. " " .. texfile .. " >/dev/null 2>&1"
+    .. " " .. texfile .. " >/dev/null"
   local cleanup = {texfile, basename .. ".aux", basename .. ".log"}
 
   if is_html then
@@ -191,16 +191,16 @@ local function prepare_tikz(code)
     return {
       tool = "tikz",
       outfile = pngfile,
-      cmd = compile
-        .. "; gs -sDEVICE=pngalpha -r300 -dNOPAUSE -dBATCH -dQUIET"
-        .. " -sOutputFile=" .. pngfile .. " " .. pdffile .. " 2>/dev/null",
+      cmd = compile .. " || { rm -f " .. pdffile .. "; false; }"
+        .. " && gs -sDEVICE=pngalpha -r300 -dNOPAUSE -dBATCH -dQUIET"
+        .. " -sOutputFile=" .. pngfile .. " " .. pdffile,
       cleanup = cleanup,
     }
   else
     return {
       tool = "tikz",
       outfile = pdffile,
-      cmd = compile,
+      cmd = compile .. " || { rm -f " .. pdffile .. "; false; }",
       cleanup = cleanup,
     }
   end
@@ -512,12 +512,18 @@ local jobs_done = false
 local function execute_all()
   if jobs_done or #pending == 0 then return end
 
+  -- Assign errfile to each job for capturing tool stderr
+  for _, job in ipairs(pending) do
+    job.errfile = job.outfile:gsub("%.[^.]+$", "") .. ".err"
+  end
+
   -- Collect jobs by tool
   local puml_files = {}
   local puml_jobs = {}
   local ditaa_files = {}
+  local ditaa_jobs = {}
   local mermaid_jobs = {}
-  local other_cmds = {}
+  local other_jobs = {}
 
   for _, job in ipairs(pending) do
     if job.tool == "plantuml" then
@@ -525,10 +531,11 @@ local function execute_all()
       table.insert(puml_jobs, job)
     elseif job.tool == "ditaa" then
       table.insert(ditaa_files, job.infile)
+      table.insert(ditaa_jobs, job)
     elseif job.tool == "mermaid" then
       table.insert(mermaid_jobs, job)
     elseif job.cmd then
-      table.insert(other_cmds, job.cmd)
+      table.insert(other_jobs, job)
     end
   end
 
@@ -537,6 +544,7 @@ local function execute_all()
 
   -- PlantUML batch as one background job (one JVM)
   if #puml_files > 0 then
+    local errfile = puml_jobs[1].errfile
     local puml_cmd = "plantuml -tsvg " .. table.concat(puml_files, " ")
     if is_pdf then
       for _, job in ipairs(puml_jobs) do
@@ -544,17 +552,22 @@ local function execute_all()
           .. " && rsvg-convert -f pdf -o " .. job.outfile .. " " .. job.svgfile
       end
     end
-    table.insert(parts, "(" .. puml_cmd .. ") &")
+    table.insert(parts, "(" .. puml_cmd .. " 2>" .. errfile .. ") &")
+    -- Share errfile across all plantuml jobs
+    for _, job in ipairs(puml_jobs) do job.errfile = errfile end
   end
 
   -- Ditaa batch as one background job (one JVM)
   if #ditaa_files > 0 then
-    table.insert(parts, "(plantuml -tpng " .. table.concat(ditaa_files, " ") .. ") &")
+    local errfile = ditaa_jobs[1].errfile
+    table.insert(parts, "(plantuml -tpng " .. table.concat(ditaa_files, " ")
+      .. " 2>" .. errfile .. ") &")
+    for _, job in ipairs(ditaa_jobs) do job.errfile = errfile end
   end
 
-  -- Each other tool (graphviz, tikz) as its own background job
-  for _, cmd in ipairs(other_cmds) do
-    table.insert(parts, "(" .. cmd .. ") &")
+  -- Each other tool (graphviz, tikz, kroki) as its own background job
+  for _, job in ipairs(other_jobs) do
+    table.insert(parts, "(" .. job.cmd .. " 2>" .. job.errfile .. ") &")
   end
 
   -- Mermaid batch via mmdc (one Chromium, as background job)
@@ -562,14 +575,16 @@ local function execute_all()
     local batchfile = imgdir .. "/mermaid-batch.md"
     local outbase = imgdir .. "/mermaid-out"
     local fmt = mermaid_jobs[1].fmt
+    local errfile = mermaid_jobs[1].errfile
     local f = io.open(batchfile, "w")
     for _, job in ipairs(mermaid_jobs) do
       f:write("```mermaid\n" .. job.code .. "\n```\n\n")
     end
     f:close()
     local mmdc_cmd = "mmdc -i " .. batchfile .. " -o " .. outbase .. ".md -e " .. fmt
-      .. mmdc_extra .. " --quiet 2>/dev/null"
-    table.insert(parts, "(" .. mmdc_cmd .. ") &")
+      .. mmdc_extra .. " --quiet"
+    table.insert(parts, "(" .. mmdc_cmd .. " 2>" .. errfile .. ") &")
+    for _, job in ipairs(mermaid_jobs) do job.errfile = errfile end
   end
 
   -- Launch all background jobs and wait
@@ -602,7 +617,7 @@ local function execute_all()
     os.remove(outbase .. ".md")
   end
 
-  -- Clean up temp files
+  -- Clean up temp files (but keep errfiles for pass2)
   for _, job in ipairs(pending) do
     if job.cleanup then
       for _, f in ipairs(job.cleanup) do os.remove(f) end
@@ -616,12 +631,47 @@ end
 -- Pass 2: replace placeholders with rendered images
 ------------------------------------------------------------------------
 
+local function file_exists(path)
+  local f = io.open(path, "r")
+  if f then f:close() return true end
+  return false
+end
+
+local function read_file(path)
+  local f = io.open(path, "r")
+  if not f then return nil end
+  local content = f:read("*a")
+  f:close()
+  return content
+end
+
 local function pass2_Div(div)
   execute_all()
   local id = div.identifier
   for _, job in ipairs(pending) do
     if job.id == id then
-      return pandoc.Para{pandoc.Image({pandoc.Str(job.caption)}, job.outfile)}
+      -- Clean up errfile after reading
+      local errtext = job.errfile and read_file(job.errfile)
+      if job.errfile then os.remove(job.errfile) end
+
+      if file_exists(job.outfile) then
+        return pandoc.Para{pandoc.Image({pandoc.Str(job.caption)}, job.outfile)}
+      end
+
+      -- Build helpful error message
+      local detail = ""
+      if errtext and errtext:match("%S") then
+        -- Trim and take first few lines for readability
+        local lines = {}
+        for line in errtext:gmatch("[^\n]+") do
+          if #lines < 5 then table.insert(lines, line) end
+        end
+        detail = ": " .. table.concat(lines, "; ")
+      end
+
+      local msg = "pandia " .. job.tool .. " error: rendering failed" .. detail
+      io.stderr:write(msg .. "\n")
+      return pandoc.Para{pandoc.Strong{pandoc.Str(msg)}}
     end
   end
 end
