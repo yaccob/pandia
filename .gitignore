@@ -1,3 +1,6 @@
 img/
 *.pdf
 *.html
+.docker-test/
+.brew-test/
+.claude/
