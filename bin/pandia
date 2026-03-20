@@ -65,7 +65,7 @@ Options:
   -v, --version         Show version
   -h, --help            Show this help
 
-Local diagram types: plantuml, graphviz/dot, mermaid, ditaa, tikz
+Local diagram types: plantuml, graphviz/dot, mermaid, ditaa, tikz, dir
 With Kroki: + bpmn, d2, dbml, erd, excalidraw, nomnoml, svgbob, vega, wavedrom, ...
 LaTeX math: \$...\$ (inline) and \$\$...\$\$ (block)
 EOF

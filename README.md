@@ -75,14 +75,18 @@ docker run --rm -v "$PWD:/data" yaccob/pandia -t pdf -t html myfile.md
 pandia [OPTIONS] <input.md>
 
 Options:
-  -t, --to FORMAT    Output format: pdf, html (default: html; repeatable)
-  --watch            Watch for changes and regenerate automatically
-  -o, --output NAME  Base name for output files (default: derived from input)
-  --maxwidth WIDTH   Max content width for HTML output (default: 60em)
-  --docker           Force Docker mode (skip local tools)
-  --local            Force local mode (fail if tools missing)
-  -v, --version      Show version
-  -h, --help         Show this help
+  -t, --to FORMAT       Output format: pdf, html (default: html; repeatable)
+  --watch               Watch for changes and regenerate automatically
+  --serve [PORT]        Start persistent server (Docker mode, default port: 3300)
+  -o, --output NAME     Base name for output files (default: derived from input)
+  --maxwidth WIDTH      Max content width for HTML output (default: 60em)
+  --center-math         Center block formulas (default: left-aligned)
+  --kroki               Enable Kroki for additional diagram types (uses $PANDIA_KROKI_URL)
+  --kroki-server URL    Enable Kroki with explicit server URL
+  --docker              Force Docker mode (skip local tools)
+  --local               Force local mode (fail if tools missing)
+  -v, --version         Show version
+  -h, --help            Show this help
 ```
 
 ### Examples
@@ -103,8 +107,21 @@ pandia --watch -t pdf -t html myfile.md
 # Custom output name
 pandia -t pdf -o report myfile.md
 
+# Center block formulas (default is left-aligned)
+pandia --center-math -t pdf myfile.md
+
+# Enable Kroki diagram types (BPMN, D2, ERD, ...)
+export PANDIA_KROKI_URL=https://kroki.io
+pandia --kroki -t pdf -t html myfile.md
+
+# Or specify the Kroki server directly
+pandia --kroki-server https://kroki.io -t html myfile.md
+
 # Force Docker even if local tools are available
 pandia --docker -t pdf myfile.md
+
+# Start as HTTP server (Docker mode)
+docker run -d -p 3300:3300 -v "$PWD:/data" --name pandia yaccob/pandia --serve
 ```
 
 ## Example Document
@@ -171,7 +188,7 @@ brings together. It also happens to echo the Greek *pan* (all) and *dia* (throug
 which isn't a bad motto for a converter that pushes everything through one pipeline.
 And if you want to get mythological: Pandia was a Greek goddess of the full moon,
 daughter of Zeus and Selene — illuminating things that would otherwise stay in the dark.
-Much like your diagrams before you ran `pandia --all`.
+Much like your diagrams before you ran `pandia`.
 
 ## How It Works
 
