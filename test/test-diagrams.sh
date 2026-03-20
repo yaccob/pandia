@@ -29,7 +29,8 @@ this is not valid plantuml syntax %%%
 @enduml
 ```'
   run_filter_isolated_both "$input"
-  assert_contains "$LAST_STDOUT" "<img" "PlantUML produces output even on syntax error (error diagram)"
+  assert_contains "$LAST_STDOUT" "plantuml error" "PlantUML error shown in output on invalid syntax"
+  assert_contains "$LAST_STDERR" "plantuml error" "PlantUML error on stderr"
 }
 test_plantuml_invalid_syntax
 
@@ -338,6 +339,127 @@ root
   assert_contains "$out" "<svg" "Dir block SVG also present"
 }
 test_mixed_diagram_types
+
+# --- Stale cache: invalid code must not reuse previous output ---------
+
+section "stale cache: invalid code must not reuse old output"
+
+test_stale_plantuml() {
+  setup_workdir
+  # First render: valid plantuml → creates img/plantuml-1.svg
+  local valid='```plantuml
+@startuml
+Alice -> Bob: hello
+@enduml
+```'
+  (cd "$WORK_DIR" && echo "$valid" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html >/dev/null 2>/dev/null)
+
+  # Second render: invalid plantuml in same workdir (img/ already exists with old SVG)
+  local invalid='```plantuml
+@startuml
+this is %%% not valid
+@enduml
+```'
+  local tmpout="$WORK_DIR/_stdout"
+  local tmperr="$WORK_DIR/_stderr"
+  (cd "$WORK_DIR" && echo "$invalid" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html >"$tmpout" 2>"$tmperr") || true
+  local out err
+  out=$(cat "$tmpout")
+  err=$(cat "$tmperr")
+
+  assert_contains "$out" "plantuml error" "Stale plantuml: error shown (not old cached image)"
+  assert_contains "$err" "plantuml error" "Stale plantuml: error on stderr"
+  teardown_workdir
+}
+test_stale_plantuml
+
+test_stale_graphviz() {
+  setup_workdir
+  # First render: valid graphviz → creates img/graphviz-1.svg
+  local valid='```graphviz
+digraph { A -> B; }
+```'
+  (cd "$WORK_DIR" && echo "$valid" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html >/dev/null 2>/dev/null)
+
+  # Verify first render created the file
+  local old_file
+  old_file=$(ls "$WORK_DIR"/img/graphviz-*.svg 2>/dev/null | head -1) || true
+  local old_size=""
+  if [[ -n "$old_file" ]]; then
+    old_size=$(wc -c < "$old_file" | tr -d ' ')
+  fi
+
+  # Second render: invalid graphviz in same workdir
+  local invalid='```graphviz
+this is not valid dot syntax
+```'
+  local tmpout="$WORK_DIR/_stdout"
+  local tmperr="$WORK_DIR/_stderr"
+  (cd "$WORK_DIR" && echo "$invalid" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html >"$tmpout" 2>"$tmperr") || true
+  local out err
+  out=$(cat "$tmpout")
+  err=$(cat "$tmperr")
+
+  # The old graphviz-1.svg may still exist from the first render.
+  # The filter must NOT silently serve the stale file as success.
+  # It should either: show an error, or overwrite with a failed result.
+  # Current bug: filter sees old file exists and treats it as success.
+  assert_contains "$out" "graphviz error" "Stale graphviz: error shown (not old cached image)"
+  assert_contains "$err" "graphviz error" "Stale graphviz: error on stderr"
+  teardown_workdir
+}
+test_stale_graphviz
+
+test_stale_mermaid() {
+  setup_workdir
+  # First render: valid mermaid
+  local valid='```mermaid
+graph LR
+  A --> B
+```'
+  (cd "$WORK_DIR" && echo "$valid" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html >/dev/null 2>/dev/null)
+
+  # Second render: invalid mermaid in same workdir
+  local invalid='```mermaid
+this is not a valid mermaid diagram @@@
+```'
+  local tmpout="$WORK_DIR/_stdout"
+  local tmperr="$WORK_DIR/_stderr"
+  (cd "$WORK_DIR" && echo "$invalid" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html >"$tmpout" 2>"$tmperr") || true
+  local out err
+  out=$(cat "$tmpout")
+  err=$(cat "$tmperr")
+
+  assert_contains "$out" "mermaid error" "Stale mermaid: error shown (not old cached image)"
+  assert_contains "$err" "mermaid error" "Stale mermaid: error on stderr"
+  teardown_workdir
+}
+test_stale_mermaid
+
+test_stale_tikz() {
+  setup_workdir
+  # First render: valid tikz
+  local valid='```tikz
+\draw (0,0) -- (1,1);
+```'
+  (cd "$WORK_DIR" && echo "$valid" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html >/dev/null 2>/dev/null)
+
+  # Second render: invalid tikz in same workdir
+  local invalid='```tikz
+\this_is_not_valid_latex
+```'
+  local tmpout="$WORK_DIR/_stdout"
+  local tmperr="$WORK_DIR/_stderr"
+  (cd "$WORK_DIR" && echo "$invalid" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html >"$tmpout" 2>"$tmperr") || true
+  local out err
+  out=$(cat "$tmpout")
+  err=$(cat "$tmperr")
+
+  assert_contains "$out" "tikz error" "Stale tikz: error shown (not old cached image)"
+  assert_contains "$err" "tikz error" "Stale tikz: error on stderr"
+  teardown_workdir
+}
+test_stale_tikz
 
 print_summary
 exit $FAIL

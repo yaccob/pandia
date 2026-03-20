@@ -512,9 +512,11 @@ local jobs_done = false
 local function execute_all()
   if jobs_done or #pending == 0 then return end
 
-  -- Assign errfile to each job for capturing tool stderr
+  -- Assign errfile and rcfile to each job for capturing tool stderr and exit code
   for _, job in ipairs(pending) do
-    job.errfile = job.outfile:gsub("%.[^.]+$", "") .. ".err"
+    local base = job.outfile:gsub("%.[^.]+$", "")
+    job.errfile = base .. ".err"
+    job.rcfile = base .. ".rc"
   end
 
   -- Collect jobs by tool
@@ -545,6 +547,7 @@ local function execute_all()
   -- PlantUML batch as one background job (one JVM)
   if #puml_files > 0 then
     local errfile = puml_jobs[1].errfile
+    local rcfile = puml_jobs[1].rcfile
     local puml_cmd = "plantuml -tsvg " .. table.concat(puml_files, " ")
     if is_pdf then
       for _, job in ipairs(puml_jobs) do
@@ -552,22 +555,30 @@ local function execute_all()
           .. " && rsvg-convert -f pdf -o " .. job.outfile .. " " .. job.svgfile
       end
     end
-    table.insert(parts, "(" .. puml_cmd .. " 2>" .. errfile .. ") &")
-    -- Share errfile across all plantuml jobs
-    for _, job in ipairs(puml_jobs) do job.errfile = errfile end
+    table.insert(parts, "(" .. puml_cmd .. " 2>" .. errfile
+      .. "; echo $? >" .. rcfile .. ") &")
+    for _, job in ipairs(puml_jobs) do
+      job.errfile = errfile
+      job.rcfile = rcfile
+    end
   end
 
   -- Ditaa batch as one background job (one JVM)
   if #ditaa_files > 0 then
     local errfile = ditaa_jobs[1].errfile
+    local rcfile = ditaa_jobs[1].rcfile
     table.insert(parts, "(plantuml -tpng " .. table.concat(ditaa_files, " ")
-      .. " 2>" .. errfile .. ") &")
-    for _, job in ipairs(ditaa_jobs) do job.errfile = errfile end
+      .. " 2>" .. errfile .. "; echo $? >" .. rcfile .. ") &")
+    for _, job in ipairs(ditaa_jobs) do
+      job.errfile = errfile
+      job.rcfile = rcfile
+    end
   end
 
   -- Each other tool (graphviz, tikz, kroki) as its own background job
   for _, job in ipairs(other_jobs) do
-    table.insert(parts, "(" .. job.cmd .. " 2>" .. job.errfile .. ") &")
+    table.insert(parts, "(" .. job.cmd .. " 2>" .. job.errfile
+      .. "; echo $? >" .. job.rcfile .. ") &")
   end
 
   -- Mermaid batch via mmdc (one Chromium, as background job)
@@ -576,6 +587,7 @@ local function execute_all()
     local outbase = imgdir .. "/mermaid-out"
     local fmt = mermaid_jobs[1].fmt
     local errfile = mermaid_jobs[1].errfile
+    local rcfile = mermaid_jobs[1].rcfile
     local f = io.open(batchfile, "w")
     for _, job in ipairs(mermaid_jobs) do
       f:write("```mermaid\n" .. job.code .. "\n```\n\n")
@@ -583,8 +595,12 @@ local function execute_all()
     f:close()
     local mmdc_cmd = "mmdc -i " .. batchfile .. " -o " .. outbase .. ".md -e " .. fmt
       .. mmdc_extra .. " --quiet"
-    table.insert(parts, "(" .. mmdc_cmd .. " 2>" .. errfile .. ") &")
-    for _, job in ipairs(mermaid_jobs) do job.errfile = errfile end
+    table.insert(parts, "(" .. mmdc_cmd .. " 2>" .. errfile
+      .. "; echo $? >" .. rcfile .. ") &")
+    for _, job in ipairs(mermaid_jobs) do
+      job.errfile = errfile
+      job.rcfile = rcfile
+    end
   end
 
   -- Launch all background jobs and wait
@@ -650,18 +666,21 @@ local function pass2_Div(div)
   local id = div.identifier
   for _, job in ipairs(pending) do
     if job.id == id then
-      -- Clean up errfile after reading
+      -- Read and clean up errfile and rcfile
       local errtext = job.errfile and read_file(job.errfile)
+      local rctext = job.rcfile and read_file(job.rcfile)
       if job.errfile then os.remove(job.errfile) end
+      if job.rcfile then os.remove(job.rcfile) end
 
-      if file_exists(job.outfile) then
+      local rc = rctext and tonumber(rctext:match("%d+")) or 0
+
+      if rc == 0 and file_exists(job.outfile) then
         return pandoc.Para{pandoc.Image({pandoc.Str(job.caption)}, job.outfile)}
       end
 
-      -- Build helpful error message
+      -- Build helpful error message from tool stderr
       local detail = ""
       if errtext and errtext:match("%S") then
-        -- Trim and take first few lines for readability
         local lines = {}
         for line in errtext:gmatch("[^\n]+") do
           if #lines < 5 then table.insert(lines, line) end
