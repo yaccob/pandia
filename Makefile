@@ -8,7 +8,7 @@ VERSION  := 1.4.0
 
 PANDOC_COMMON := --lua-filter=$(FILTER) --from=gfm+tex_math_dollars
 
-.PHONY: all pdf html clean docker-pdf docker-html docker-all docker-build docker-push
+.PHONY: all pdf html clean test docker-pdf docker-html docker-all docker-build docker-push docker-test
 
 # --- Local targets (require pandoc + tools installed) ---
 
@@ -40,6 +40,9 @@ $(HTML): $(SRC) $(FILTER)
 clean:
 	rm -rf $(PDF) $(HTML) $(IMGDIR)
 
+test:
+	bash test/test.sh
+
 # --- Docker targets ---
 
 docker-pdf:
@@ -57,3 +60,6 @@ docker-build:
 docker-push: docker-build
 	docker push $(IMAGE):$(VERSION)
 	docker push $(IMAGE):latest
+
+docker-test:
+	docker run --rm -v "$$PWD:/data" --entrypoint /bin/sh $(IMAGE) -c "apk add --no-cache bash >/dev/null 2>&1 && bash /data/test/test.sh /data/$(FILTER)"
