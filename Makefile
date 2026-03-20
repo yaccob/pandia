@@ -8,7 +8,7 @@ VERSION  := 1.4.0
 
 PANDOC_COMMON := --lua-filter=$(FILTER) --from=gfm+tex_math_dollars
 
-.PHONY: all pdf html clean test docker-pdf docker-html docker-all docker-build docker-push docker-test
+.PHONY: all pdf html clean test test-quick docker-pdf docker-html docker-all docker-build docker-push docker-test
 
 # --- Local targets (require pandoc + tools installed) ---
 
@@ -42,6 +42,12 @@ clean:
 
 test:
 	bash test/test.sh
+
+test-quick:
+	bash test/test-dir.sh
+	bash test/test-diagrams.sh
+	bash test/test-robustness.sh
+	bash test/test-cli.sh
 
 # --- Docker targets ---
 
