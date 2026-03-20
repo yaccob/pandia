@@ -7,7 +7,7 @@ date: 2026-03-17
 # Overview
 
 This document demonstrates embedding **PlantUML** (including **EBNF**),
-**Graphviz**, **Mermaid**, **Ditaa**, **TikZ**, **Directory Trees**,
+**Graphviz**, **Mermaid**, **Markmap**, **Ditaa**, **TikZ**, **Directory Trees**,
 and **LaTeX formulas** in a Markdown document.
 With `--kroki`, additional diagram types like **BPMN**, **D2**, **ERD**,
 **Svgbob**, **WaveDrom**, **Nomnoml**, and **Pikchr** are available.
@@ -184,6 +184,48 @@ gantt
     Frontend          :e2, after d2, 25d
     section Testing
     Integration       :t1, after e1, 14d
+```
+
+## Markmap – Interactive Mind Map
+
+In HTML output, this renders as an interactive, expandable mind map.
+In PDF output, a static snapshot is used.
+
+```markmap
+# Software Architecture
+## Frontend
+### Framework
+#### React
+#### Vue.js
+#### Angular
+### Build Tools
+#### Vite
+#### Webpack
+### Testing
+#### Jest
+#### Cypress
+## Backend
+### Languages
+#### TypeScript / Node.js
+#### Python
+#### Go
+### Databases
+#### PostgreSQL
+#### Redis
+#### MongoDB
+### API
+#### REST
+#### GraphQL
+## Infrastructure
+### Containers
+#### Docker
+#### Kubernetes
+### CI/CD
+#### GitHub Actions
+#### GitLab CI
+### Monitoring
+#### Prometheus
+#### Grafana
 ```
 
 ## Ditaa – ASCII Art Diagram
@@ -506,6 +548,7 @@ $$a_{n+1} = \begin{cases} \frac{a_n}{2} & \text{if } a_n \text{ is even} \\ 3a_n
 | PlantUML  | `` ```plantuml ``   | Local           |
 | Graphviz  | `` ```graphviz ``   | Local           |
 | Mermaid   | `` ```mermaid ``    | Local           |
+| Markmap   | `` ```markmap ``    | Local (interactive in HTML) |
 | Ditaa     | `` ```ditaa ``      | Local           |
 | TikZ      | `` ```tikz ``       | Local           |
 | Dir Tree  | `` ```dir ``        | Local (SVG)     |

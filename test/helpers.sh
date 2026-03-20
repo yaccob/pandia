@@ -91,6 +91,16 @@ WORK_DIR=""
 setup_workdir() {
   WORK_DIR=$(mktemp -d)
   cp "$FILTER" "$WORK_DIR/"
+  # Copy helper scripts that the filter may invoke
+  local filter_dir
+  filter_dir=$(dirname "$FILTER")
+  for helper in markmap-render.mjs; do
+    if [[ -f "$filter_dir/$helper" ]]; then
+      cp "$filter_dir/$helper" "$WORK_DIR/"
+    elif [[ -f "$PROJECT_DIR/$helper" ]]; then
+      cp "$PROJECT_DIR/$helper" "$WORK_DIR/"
+    fi
+  done
 }
 
 teardown_workdir() {

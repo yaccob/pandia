@@ -368,6 +368,148 @@ root
 }
 test_mixed_diagram_types
 
+# --- Markmap -----------------------------------------------------------
+
+section "markmap: happy path (HTML)"
+
+test_markmap_basic_html() {
+  local input='```markmap
+# Root
+## Branch A
+### Leaf 1
+## Branch B
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  assert_contains "$out" "markmap" "Markmap output contains markmap reference"
+  assert_contains "$out" "<svg" "Markmap output contains SVG element"
+  assert_contains "$out" "<script" "Markmap output contains script tags"
+  assert_not_contains "$out" "<img" "Markmap HTML is inline, not an image"
+}
+test_markmap_basic_html
+
+test_markmap_deep_tree() {
+  local input='```markmap
+# Project
+## Frontend
+### React
+#### Components
+#### Hooks
+### TypeScript
+## Backend
+### Node.js
+### PostgreSQL
+## DevOps
+### Docker
+### CI/CD
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  assert_contains "$out" "Frontend" "Deep markmap contains branch content"
+  assert_contains "$out" "Components" "Deep markmap contains leaf content"
+  assert_contains "$out" "<svg" "Deep markmap renders SVG"
+}
+test_markmap_deep_tree
+
+test_markmap_multiple() {
+  local input='```markmap
+# First Map
+## A
+## B
+```
+
+Some text between.
+
+```markmap
+# Second Map
+## X
+## Y
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  assert_count "$out" "<svg" 2 "Two markmap blocks produce two SVGs"
+  assert_contains "$out" "First Map" "First markmap content present"
+  assert_contains "$out" "Second Map" "Second markmap content present"
+  assert_contains "$out" "markmap-1" "First markmap has unique ID"
+  assert_contains "$out" "markmap-2" "Second markmap has unique ID"
+}
+test_markmap_multiple
+
+test_markmap_scripts_deduplication() {
+  local input='```markmap
+# Map 1
+## A
+```
+
+```markmap
+# Map 2
+## B
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  # d3 and markmap-view scripts should only be loaded once
+  # Each block's script checks for existing script tags before loading
+  assert_contains "$out" "existing = document.querySelector" "Script deduplication logic present"
+}
+test_markmap_scripts_deduplication
+
+section "markmap: error cases"
+
+test_markmap_empty_block() {
+  local input='```markmap
+```'
+  run_filter_isolated_both "$input"
+  assert_contains "$LAST_STDOUT" "markmap error" "Empty markmap shows error in output"
+  assert_contains "$LAST_STDERR" "markmap error" "Empty markmap shows error on stderr"
+}
+test_markmap_empty_block
+
+test_markmap_whitespace_only() {
+  local input='```markmap
+
+
+```'
+  run_filter_isolated_both "$input"
+  assert_contains "$LAST_STDOUT" "markmap error" "Whitespace-only markmap shows error"
+}
+test_markmap_whitespace_only
+
+section "markmap: PDF output"
+
+test_markmap_pdf() {
+  local input='```markmap
+# Root
+## Branch A
+## Branch B
+```'
+  run_filter_pdf_keep "$input"
+  local found
+  found=$(ls "$WORK_DIR"/img/markmap-*.png 2>/dev/null | head -1) || true
+  assert_file_exists "${found:-/nonexistent}" "Markmap produces PNG for PDF output"
+  teardown_workdir
+}
+test_markmap_pdf
+
+section "markmap: mixed with other diagrams"
+
+test_markmap_with_graphviz() {
+  local input='```markmap
+# Overview
+## Part A
+## Part B
+```
+
+```graphviz
+digraph { A -> B; }
+```'
+  local out
+  out=$(run_filter_isolated "$input")
+  assert_contains "$out" "<svg" "Markmap SVG present"
+  assert_contains "$out" "<img" "Graphviz image present"
+  assert_contains "$out" "Overview" "Markmap content intact"
+}
+test_markmap_with_graphviz
+
 # --- Stale cache: invalid code must not reuse previous output ---------
 
 section "stale cache: invalid code must not reuse old output"

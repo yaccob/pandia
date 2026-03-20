@@ -30,6 +30,7 @@ local kroki_server = os.getenv("PANDIA_KROKI_URL")
 local local_tools = {
   plantuml = true, graphviz = true, dot = true,
   mermaid = true, ditaa = true, tikz = true,
+  markmap = true,
 }
 
 -- All Kroki-supported diagram types
@@ -399,6 +400,100 @@ local function render_dir(code)
 end
 
 ------------------------------------------------------------------------
+-- Markmap rendering: interactive HTML or static PNG
+------------------------------------------------------------------------
+
+-- Locate the markmap-render.mjs helper script
+local function find_markmap_render()
+  for _, dir in ipairs({
+    -- Beside the filter (dev / Homebrew)
+    PANDOC_SCRIPT_FILE and PANDOC_SCRIPT_FILE:match("(.*/)")  or "",
+    -- Container location
+    "/usr/local/share/pandia/",
+  }) do
+    local path = dir .. "markmap-render.mjs"
+    local f = io.open(path, "r")
+    if f then f:close(); return path end
+  end
+  return nil
+end
+
+local markmap_counter = 0
+
+local function render_markmap_html(code)
+  if not code:match("%S") then
+    return nil, "Empty markmap block"
+  end
+
+  local render_script = find_markmap_render()
+  if not render_script then
+    return nil, "markmap-render.mjs not found"
+  end
+
+  ensure_imgdir()
+  markmap_counter = markmap_counter + 1
+  local id = markmap_counter
+  local infile = imgdir .. "/markmap-" .. id .. ".md"
+  local outfile = imgdir .. "/markmap-" .. id .. ".html"
+
+  local f = io.open(infile, "w")
+  f:write(code)
+  f:close()
+
+  local cmd = "node " .. render_script
+    .. " --input " .. infile
+    .. " --output " .. outfile
+    .. " --format html-fragment"
+    .. " --id " .. id
+
+  local ok = os.execute(cmd .. " 2>/dev/null")
+  local result = nil
+  if ok then
+    local out = io.open(outfile, "r")
+    if out then
+      result = pandoc.RawBlock("html", out:read("*a"))
+      out:close()
+    end
+  end
+
+  os.remove(infile)
+  os.remove(outfile)
+
+  if result then
+    return result
+  end
+  return nil, "markmap-render.mjs failed"
+end
+
+local function prepare_markmap_pdf(code)
+  local render_script = find_markmap_render()
+  if not render_script then return nil end
+
+  ensure_imgdir()
+  filecounter = filecounter + 1
+  local basename = imgdir .. "/markmap-" .. filecounter
+  local infile = basename .. ".md"
+  local outfile = basename .. ".png"
+
+  local f = io.open(infile, "w")
+  f:write(code)
+  f:close()
+
+  local cmd = "node " .. render_script
+    .. " --input " .. infile
+    .. " --output " .. outfile
+    .. " --format png"
+    .. " --id " .. filecounter
+
+  return {
+    tool = "markmap",
+    outfile = outfile,
+    cmd = cmd,
+    cleanup = {infile},
+  }
+end
+
+------------------------------------------------------------------------
 -- Kroki rendering: POST diagram source, receive image
 ------------------------------------------------------------------------
 
@@ -469,8 +564,21 @@ local function pass1_CodeBlock(block)
     return result
   end
 
+  -- Markmap: interactive HTML or static PNG (like dir blocks)
+  if lang == "markmap" then
+    detect_format()
+    if is_html then
+      local result, err = render_markmap_html(block.text)
+      if err then
+        io.stderr:write("pandia markmap error: " .. err .. "\n")
+        return pandoc.Para{pandoc.Strong{pandoc.Str("markmap error: " .. err)}}
+      end
+      return result
+    else
+      job = prepare_markmap_pdf(block.text)
+    end
   -- Local tools take priority
-  if lang == "plantuml" then
+  elseif lang == "plantuml" then
     job = prepare_plantuml(block.text)
   elseif lang == "graphviz" or lang == "dot" then
     job = prepare_graphviz(block.text, block.attributes.engine)
