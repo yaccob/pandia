@@ -30,7 +30,7 @@ fi
 
 assert_contains() {
   local output="$1" pattern="$2" msg="$3"
-  if echo "$output" | grep -q "$pattern"; then
+  if echo "$output" | grep -qF -- "$pattern"; then
     PASS=$((PASS + 1))
     printf "  ${GREEN}PASS${RESET} %s\n" "$msg"
   else
@@ -43,7 +43,7 @@ assert_contains() {
 
 assert_not_contains() {
   local output="$1" pattern="$2" msg="$3"
-  if echo "$output" | grep -q "$pattern"; then
+  if echo "$output" | grep -qF -- "$pattern"; then
     FAIL=$((FAIL + 1))
     ERRORS="${ERRORS}\n  FAIL: ${msg} (unexpected pattern found: ${pattern})"
     printf "  ${RED}FAIL${RESET} %s\n" "$msg"
@@ -57,7 +57,7 @@ assert_not_contains() {
 assert_count() {
   local output="$1" pattern="$2" expected="$3" msg="$4"
   local actual
-  actual=$(echo "$output" | grep -o "$pattern" | wc -l | tr -d ' ')
+  actual=$(echo "$output" | grep -oF -- "$pattern" | wc -l | tr -d ' ')
   if [[ "$actual" -eq "$expected" ]]; then
     PASS=$((PASS + 1))
     printf "  ${GREEN}PASS${RESET} %s\n" "$msg"
@@ -494,6 +494,150 @@ some content
   assert_contains "$out" "nosuchdiagram" "Unknown type preserved as code block"
 }
 test_unknown_type_ignored
+
+# --- Tests: CLI (bin/pandia) ------------------------------------------
+
+PANDIA="$PROJECT_DIR/bin/pandia"
+
+section "cli: version and help"
+
+test_cli_version_long() {
+  local out
+  out=$("$PANDIA" --version 2>&1)
+  assert_contains "$out" "pandia v" "--version shows version string"
+  assert_contains "$out" "1.4.0" "--version shows correct version number"
+}
+test_cli_version_long
+
+test_cli_version_short() {
+  local out
+  out=$("$PANDIA" -v 2>&1)
+  assert_contains "$out" "pandia v" "-v shows version string"
+}
+test_cli_version_short
+
+test_cli_help_long() {
+  local out
+  out=$("$PANDIA" --help 2>&1)
+  assert_contains "$out" "Usage:" "--help shows usage"
+  assert_contains "$out" "Options:" "--help shows options"
+  assert_contains "$out" "-t, --to" "--help documents -t flag"
+  assert_contains "$out" "--watch" "--help documents --watch"
+  assert_contains "$out" "--serve" "--help documents --serve"
+  assert_contains "$out" "--kroki" "--help documents --kroki"
+}
+test_cli_help_long
+
+test_cli_help_short() {
+  local out
+  out=$("$PANDIA" -h 2>&1)
+  assert_contains "$out" "Usage:" "-h shows usage"
+}
+test_cli_help_short
+
+section "cli: argument validation errors"
+
+test_cli_no_input() {
+  local out rc
+  out=$("$PANDIA" -t html 2>&1) && rc=0 || rc=$?
+  assert_contains "$out" "No input file" "No input file error message"
+  assert_contains "$out" "pandia --help" "Suggests --help"
+  [[ $rc -ne 0 ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "Non-zero exit code"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "Non-zero exit code"; ERRORS="${ERRORS}\n  FAIL: Non-zero exit code (got 0)"; }
+}
+test_cli_no_input
+
+test_cli_file_not_found() {
+  local out rc
+  out=$("$PANDIA" -t html /nonexistent/file.md 2>&1) && rc=0 || rc=$?
+  assert_contains "$out" "not found" "File not found error message"
+  [[ $rc -ne 0 ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "Non-zero exit code"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "Non-zero exit code"; ERRORS="${ERRORS}\n  FAIL: Non-zero exit code (got 0)"; }
+}
+test_cli_file_not_found
+
+test_cli_unknown_format() {
+  local out rc
+  out=$("$PANDIA" -t docx test.md 2>&1) && rc=0 || rc=$?
+  assert_contains "$out" "Unknown format" "Unknown format error message"
+  assert_contains "$out" "docx" "Error includes the bad format name"
+  [[ $rc -ne 0 ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "Non-zero exit code"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "Non-zero exit code"; ERRORS="${ERRORS}\n  FAIL: Non-zero exit code (got 0)"; }
+}
+test_cli_unknown_format
+
+test_cli_kroki_no_env() {
+  local out rc
+  out=$(PANDIA_KROKI_URL="" "$PANDIA" --kroki test.md 2>&1) && rc=0 || rc=$?
+  assert_contains "$out" "PANDIA_KROKI_URL" "--kroki without env var mentions the variable"
+  [[ $rc -ne 0 ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "Non-zero exit code"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "Non-zero exit code"; ERRORS="${ERRORS}\n  FAIL: Non-zero exit code (got 0)"; }
+}
+test_cli_kroki_no_env
+
+section "cli: local rendering"
+
+test_cli_html_output() {
+  local tmpdir out
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  out=$("$PANDIA" -t html -o "$tmpdir/out" --local "$tmpdir/input.md" 2>&1)
+  assert_contains "$out" "Generating" "Shows generating message"
+  [[ -f "$tmpdir/out.html" ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "HTML file created"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "HTML file created"; ERRORS="${ERRORS}\n  FAIL: HTML file not created"; }
+  rm -rf "$tmpdir"
+}
+test_cli_html_output
+
+test_cli_pdf_output() {
+  local tmpdir out
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  out=$("$PANDIA" -t pdf -o "$tmpdir/out" --local "$tmpdir/input.md" 2>&1)
+  assert_contains "$out" "Generating" "Shows generating message"
+  [[ -f "$tmpdir/out.pdf" ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "PDF file created"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "PDF file created"; ERRORS="${ERRORS}\n  FAIL: PDF file not created"; }
+  rm -rf "$tmpdir"
+}
+test_cli_pdf_output
+
+test_cli_both_formats() {
+  local tmpdir out
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  out=$("$PANDIA" -t pdf -t html -o "$tmpdir/out" --local "$tmpdir/input.md" 2>&1)
+  local ok=true
+  [[ -f "$tmpdir/out.html" ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "HTML file created with -t pdf -t html"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "HTML file created with -t pdf -t html"; ERRORS="${ERRORS}\n  FAIL: HTML file not created"; }
+  [[ -f "$tmpdir/out.pdf" ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "PDF file created with -t pdf -t html"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "PDF file created with -t pdf -t html"; ERRORS="${ERRORS}\n  FAIL: PDF file not created"; }
+  rm -rf "$tmpdir"
+}
+test_cli_both_formats
+
+test_cli_default_format_is_html() {
+  local tmpdir out
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  out=$("$PANDIA" -o "$tmpdir/out" --local "$tmpdir/input.md" 2>&1)
+  [[ -f "$tmpdir/out.html" ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "Default format is HTML"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "Default format is HTML"; ERRORS="${ERRORS}\n  FAIL: Default HTML not created"; }
+  [[ ! -f "$tmpdir/out.pdf" ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "No PDF created when no -t pdf"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "No PDF created when no -t pdf"; ERRORS="${ERRORS}\n  FAIL: Unexpected PDF created"; }
+  rm -rf "$tmpdir"
+}
+test_cli_default_format_is_html
+
+test_cli_output_name_derived() {
+  local tmpdir out
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/myfile.md"
+  out=$(cd "$tmpdir" && "$PANDIA" --local myfile.md 2>&1)
+  [[ -f "$tmpdir/myfile.html" ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "Output name derived from input filename"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "Output name derived from input filename"; ERRORS="${ERRORS}\n  FAIL: myfile.html not created"; }
+  rm -rf "$tmpdir"
+}
+test_cli_output_name_derived
 
 # --- Summary ----------------------------------------------------------
 
