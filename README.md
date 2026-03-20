@@ -1,19 +1,44 @@
 # pandia
 
 Markdown-to-PDF/HTML converter with built-in support for diagrams and LaTeX math.
-All diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zoom level.
+Most diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zoom level.
 
 ## Supported Features
 
-| Feature    | Code Block Syntax   | Output Format          |
-|------------|---------------------|------------------------|
-| PlantUML   | `` ```plantuml ``   | Vector (PDF/SVG)       |
-| Graphviz   | `` ```graphviz ``   | Vector (PDF/SVG)       |
-| Mermaid    | `` ```mermaid ``    | Vector (PDF/SVG)       |
-| Ditaa      | `` ```ditaa ``      | Raster (PNG)           |
+**Built-in (pandia native)**
+
+| Feature    | Code Block Syntax   | Output Format             |
+|------------|---------------------|---------------------------|
+| Dir Tree   | `` ```dir ``        | Vector (SVG)              |
+
+**Pandoc native**
+
+| Feature    | Syntax              | Output Format             |
+|------------|---------------------|---------------------------|
+| LaTeX Math | `$...$` / `$$...$$` | Native (Pandoc)           |
+
+**Local tools** (no network required)
+
+| Feature    | Code Block Syntax   | Output Format             |
+|------------|---------------------|---------------------------|
+| PlantUML   | `` ```plantuml ``   | Vector (PDF/SVG)          |
+| Graphviz   | `` ```graphviz ``   | Vector (PDF/SVG)          |
+| Mermaid    | `` ```mermaid ``    | Vector (PDF/SVG)          |
+| Ditaa      | `` ```ditaa ``      | Raster (PNG)              |
 | TikZ       | `` ```tikz ``       | Vector (PDF), PNG in HTML |
-| Dir Tree   | `` ```dir ``        | Vector (SVG)           |
-| LaTeX Math | `$...$` / `$$...$$` | Native (Pandoc)        |
+
+**Kroki-powered** (requires `--kroki` flag)
+
+| Feature    | Code Block Syntax   | Output Format             |
+|------------|---------------------|---------------------------|
+| BPMN       | `` ```bpmn ``       | Vector (PDF/SVG)          |
+| D2         | `` ```d2 ``         | Vector (PDF/SVG)          |
+| DBML       | `` ```dbml ``       | Vector (PDF/SVG)          |
+| ERD        | `` ```erd ``        | Vector (PDF/SVG)          |
+| Svgbob     | `` ```svgbob ``     | Vector (PDF/SVG)          |
+| WaveDrom   | `` ```wavedrom ``   | Vector (PDF/SVG)          |
+| Nomnoml    | `` ```nomnoml ``    | Vector (PDF/SVG)          |
+| Pikchr     | `` ```pikchr ``     | Vector (PDF/SVG)          |
 
 ## Installation
 
