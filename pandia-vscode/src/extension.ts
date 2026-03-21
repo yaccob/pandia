@@ -67,7 +67,8 @@ async function updatePreview(document: vscode.TextDocument) {
   try {
     const config = vscode.workspace.getConfiguration('pandia');
     const krokiServer = config.get<string>('krokiServer');
-    const html = await client.preview(document.getText(), {
+    const html = await client.render(document.getText(), {
+      math: 'mathml',
       kroki_server: krokiServer || undefined,
     });
     if (previewPanel) {

@@ -2,17 +2,13 @@ openapi: 3.0.3
 info:
   title: pandia API
   description: |
-    HTTP API for rendering Markdown documents with embedded diagrams to PDF/HTML.
+    HTTP API for rendering Markdown with embedded diagrams to HTML or PDF.
 
-    **`/render`** operates on files mounted into the container (via `-v`).
-    It reads a `.md` file from disk, writes output files (`.html`, `.pdf`) next to it,
-    and returns the list of generated file paths.
-
-    **`/preview`** is stateless: it accepts raw Markdown as the request body and
-    returns self-contained HTML with all images inlined as SVG and math rendered
-    as MathML. No files are written to disk. This is designed for editor integrations
-    (e.g. the VS Code extension) that need fast, on-the-fly rendering.
-  version: 1.6.0
+    **`POST /render`** accepts raw Markdown as the request body and returns
+    the rendered document directly. All diagram images are inlined (self-contained
+    HTML). Output format, math rendering, and other options are controlled via
+    query parameters.
+  version: 1.7.0
   license:
     name: MIT
 
@@ -24,7 +20,6 @@ paths:
   /health:
     get:
       summary: Health check
-      description: Returns `ok` if the server is running and ready to accept requests.
       operationId: health
       responses:
         '200':
@@ -37,66 +32,32 @@ paths:
 
   /render:
     post:
-      summary: Render a Markdown file on disk to PDF/HTML
+      summary: Render Markdown to HTML or PDF
       description: |
-        Reads an input `.md` file from the container's `/data` directory,
-        renders it to the requested format(s), and writes the output files
-        next to the input file. Returns the list of generated file paths.
-
-        The container must be started with a volume mount (`-v "$PWD:/data"`)
-        so that input files are accessible and output files are written back.
-      operationId: renderFile
-      requestBody:
-        required: true
-        content:
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/RenderRequest'
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RenderRequest'
-      responses:
-        '200':
-          description: Rendering succeeded
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RenderResponse'
-        '400':
-          description: Missing or invalid parameters
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Rendering failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-    get:
-      summary: Render a Markdown file (query parameter variant)
-      description: |
-        Same as `POST /render`, but parameters are passed as query strings.
-        Useful for quick testing in a browser.
-      operationId: renderFileGet
+        Accepts raw Markdown as the request body and returns the rendered
+        document directly as the response body. HTML output is self-contained
+        with all images inlined as SVG. PDF output is returned as binary.
+      operationId: render
       parameters:
-        - name: file
-          in: query
-          required: true
-          description: Path to the input `.md` file (relative to `/data`)
-          schema:
-            type: string
-          example: example.md
-        - name: to
+        - name: format
           in: query
           required: false
-          description: Output format(s), comma-separated
+          description: Output format
           schema:
             type: string
+            enum: [html, pdf]
             default: html
-            example: pdf,html
+        - name: math
+          in: query
+          required: false
+          description: |
+            Math rendering engine. `mathjax` embeds MathJax JavaScript
+            (requires browser/CDN). `mathml` renders math as MathML
+            (no JavaScript needed, works in VS Code webviews).
+          schema:
+            type: string
+            enum: [mathjax, mathml]
+            default: mathjax
         - name: maxwidth
           in: query
           required: false
@@ -104,45 +65,23 @@ paths:
           schema:
             type: string
             default: 60em
-      responses:
-        '200':
-          description: Rendering succeeded
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RenderResponse'
-        '400':
-          description: Missing or invalid parameters
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Rendering failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /preview:
-    post:
-      summary: Render Markdown content to self-contained HTML
-      description: |
-        Accepts raw Markdown as the request body and returns fully self-contained
-        HTML. All diagram images are inlined as SVG, math is rendered server-side
-        as MathML. No files are written to disk.
-
-        This endpoint is designed for live preview integrations (e.g. the VS Code
-        extension). It is stateless — each request is independent.
-      operationId: preview
-      parameters:
-        - name: maxwidth
+        - name: center_math
           in: query
           required: false
-          description: Maximum content width for the HTML output
+          description: Center display math (default is left-aligned)
           schema:
             type: string
-            default: 60em
+            enum: ['true', 'false']
+            default: 'false'
+        - name: kroki_server
+          in: query
+          required: false
+          description: |
+            Kroki server URL for rendering additional diagram types
+            (BPMN, ERD, Pikchr, etc.)
+          schema:
+            type: string
+          example: https://kroki.io
       requestBody:
         required: true
         description: Raw Markdown content
@@ -156,15 +95,28 @@ paths:
               ```graphviz
               digraph { A -> B; }
               ```
+
+              Inline math: $e^{i\pi}+1=0$
       responses:
         '200':
-          description: Rendered HTML
+          description: Rendered document
           content:
             text/html:
               schema:
                 type: string
+              example: '<html>...</html>'
+            application/pdf:
+              schema:
+                type: string
+                format: binary
         '400':
-          description: Empty or missing request body
+          description: Missing/empty body or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '405':
+          description: Method not allowed (use POST)
           content:
             application/json:
               schema:
@@ -178,42 +130,10 @@ paths:
 
 components:
   schemas:
-    RenderRequest:
-      type: object
-      required:
-        - file
-      properties:
-        file:
-          type: string
-          description: Path to the input `.md` file (relative to `/data`)
-          example: example.md
-        to:
-          type: string
-          description: Output format(s), comma-separated (`html`, `pdf`, or `html,pdf`)
-          default: html
-          example: pdf,html
-        maxwidth:
-          type: string
-          description: Maximum content width for HTML output
-          default: 60em
-
-    RenderResponse:
-      type: object
-      properties:
-        ok:
-          type: boolean
-          enum: [true]
-        files:
-          type: array
-          items:
-            type: string
-          description: List of generated output file paths
-          example: [example.html, example.pdf]
-
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
           description: Human-readable error message
-          example: "Missing \"file\" parameter"
+          example: "Empty request body — send Markdown as plain text"

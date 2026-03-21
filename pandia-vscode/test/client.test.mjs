@@ -2,8 +2,8 @@ import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 
-// We test against a mock server to avoid needing Docker for unit tests.
-// Integration tests against the real container are in test/test-serve.sh.
+// Mock server simulating the pandia /render and /health endpoints.
+// Integration tests against the real container are in test/test-container.sh.
 
 let mockServer
 let mockPort
@@ -18,7 +18,7 @@ function startMockServer () {
         return res.end('ok')
       }
 
-      if (url.pathname === '/preview' && req.method === 'POST') {
+      if (url.pathname === '/render' && req.method === 'POST') {
         let body = ''
         req.on('data', c => { body += c })
         req.on('end', () => {
@@ -26,9 +26,16 @@ function startMockServer () {
             res.writeHead(400, { 'Content-Type': 'application/json' })
             return res.end(JSON.stringify({ error: 'Empty body' }))
           }
+          const format = url.searchParams.get('format') || 'html'
+          const math = url.searchParams.get('math') || 'mathjax'
           const maxwidth = url.searchParams.get('maxwidth') || '60em'
+          const kroki = url.searchParams.get('kroki_server') || ''
+          if (format === 'pdf') {
+            res.writeHead(200, { 'Content-Type': 'application/pdf' })
+            return res.end('%PDF-mock')
+          }
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-          res.end(`<html><body style="max-width:${maxwidth}"><h1>Mock</h1><p>${body}</p></body></html>`)
+          res.end(`<html><body style="max-width:${maxwidth}" data-math="${math}" data-kroki="${kroki}"><h1>Mock</h1><p>${body}</p></body></html>`)
         })
         return
       }
@@ -51,47 +58,57 @@ after(() => {
   mockServer.close()
 })
 
-// Import after build — these tests run against the compiled output
 const { PandiaClient } = await import('../out/client.js')
 
 describe('PandiaClient', () => {
   it('checkHealth returns true for running server', async () => {
     const client = new PandiaClient(`http://localhost:${mockPort}`)
-    const ok = await client.checkHealth()
-    assert.equal(ok, true)
+    assert.equal(await client.checkHealth(), true)
   })
 
   it('checkHealth returns false for unreachable server', async () => {
     const client = new PandiaClient('http://localhost:19999')
-    const ok = await client.checkHealth()
-    assert.equal(ok, false)
+    assert.equal(await client.checkHealth(), false)
   })
 
-  it('preview returns HTML for valid markdown', async () => {
+  it('render returns HTML for valid markdown', async () => {
     const client = new PandiaClient(`http://localhost:${mockPort}`)
-    const html = await client.preview('# Hello')
+    const html = await client.render('# Hello')
     assert.ok(html.includes('Hello'))
     assert.ok(html.includes('<html>'))
   })
 
-  it('preview passes maxwidth as query parameter', async () => {
+  it('render passes format parameter', async () => {
     const client = new PandiaClient(`http://localhost:${mockPort}`)
-    const html = await client.preview('# Test', { maxwidth: '40em' })
+    const pdf = await client.render('# Test', { format: 'pdf' })
+    assert.ok(pdf.includes('%PDF'))
+  })
+
+  it('render passes math parameter', async () => {
+    const client = new PandiaClient(`http://localhost:${mockPort}`)
+    const html = await client.render('# Test', { math: 'mathml' })
+    assert.ok(html.includes('data-math="mathml"'))
+  })
+
+  it('render passes maxwidth parameter', async () => {
+    const client = new PandiaClient(`http://localhost:${mockPort}`)
+    const html = await client.render('# Test', { maxwidth: '40em' })
     assert.ok(html.includes('40em'))
   })
 
-  it('preview throws on empty content', async () => {
+  it('render passes kroki_server parameter', async () => {
     const client = new PandiaClient(`http://localhost:${mockPort}`)
-    await assert.rejects(
-      () => client.preview(''),
-      /empty|400/i
-    )
+    const html = await client.render('# Test', { kroki_server: 'https://kroki.io' })
+    assert.ok(html.includes('data-kroki="https://kroki.io"'))
   })
 
-  it('preview throws on unreachable server', async () => {
+  it('render throws on empty content', async () => {
+    const client = new PandiaClient(`http://localhost:${mockPort}`)
+    await assert.rejects(() => client.render(''), /empty|400/i)
+  })
+
+  it('render throws on unreachable server', async () => {
     const client = new PandiaClient('http://localhost:19999')
-    await assert.rejects(
-      () => client.preview('# Test')
-    )
+    await assert.rejects(() => client.render('# Test'))
   })
 })

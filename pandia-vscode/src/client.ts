@@ -1,8 +1,11 @@
 import http from 'http';
 import { URL } from 'url';
 
-export interface PreviewOptions {
+export interface RenderOptions {
+  format?: 'html' | 'pdf';
+  math?: 'mathjax' | 'mathml';
   maxwidth?: string;
+  center_math?: boolean;
   kroki_server?: string;
 }
 
@@ -22,17 +25,20 @@ export class PandiaClient {
     }
   }
 
-  async preview(content: string, opts: PreviewOptions = {}): Promise<string> {
+  async render(content: string, opts: RenderOptions = {}): Promise<string> {
     if (!content.trim()) {
       throw new Error('Empty content');
     }
 
     const params = new URLSearchParams();
+    if (opts.format) params.set('format', opts.format);
+    if (opts.math) params.set('math', opts.math);
     if (opts.maxwidth) params.set('maxwidth', opts.maxwidth);
+    if (opts.center_math) params.set('center_math', 'true');
     if (opts.kroki_server) params.set('kroki_server', opts.kroki_server);
 
     const query = params.toString();
-    const path = '/preview' + (query ? `?${query}` : '');
+    const path = '/render' + (query ? `?${query}` : '');
 
     const res = await this.request('POST', path, content);
 
@@ -61,7 +67,7 @@ export class PandiaClient {
         port: url.port,
         path: url.pathname + url.search,
         method,
-        timeout: 30000,
+        timeout: 60000,
       };
 
       const req = http.request(opts, (res) => {

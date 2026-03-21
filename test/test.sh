@@ -65,7 +65,7 @@ MODULES=(
   "$SCRIPT_DIR/test-robustness.sh"
   "$SCRIPT_DIR/test-cli.sh"
   "$SCRIPT_DIR/test-watch.sh"
-  "$SCRIPT_DIR/test-serve.sh"
+  "$SCRIPT_DIR/test-container.sh"
   "$SCRIPT_DIR/test-entrypoint.sh"
 )
 
