@@ -247,5 +247,42 @@ else
   printf "  ${RED}SKIP${RESET} --server test: no container runtime found\n"
 fi
 
+section "cli: pandia-serve local (no container)"
+
+PANDIA_SERVE="$(dirname "$PANDIA")/pandia-serve"
+
+test_local_serve_renders() {
+  local port=13398
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  echo '# Local serve test' > "$tmpdir/input.md"
+
+  # Start pandia-serve locally in background
+  "$PANDIA_SERVE" "$port" &
+  local serve_pid=$!
+  local i=0
+  while [[ $i -lt 30 ]]; do
+    curl -sf "http://localhost:${port}/health" >/dev/null 2>&1 && break
+    sleep 1; i=$((i + 1))
+  done
+
+  # Render via --server
+  local out
+  out=$("$PANDIA" --server "http://localhost:${port}" -t html -o "$tmpdir/out" "$tmpdir/input.md" 2>&1) || true
+
+  # Must not fail with "cannot open filter" or similar
+  assert_not_contains "$out" "No such file" \
+    "pandia-serve local does not fail with missing filter"
+  assert_not_contains "$out" "Error running filter" \
+    "pandia-serve local filter runs without error"
+  assert_file_exists "$tmpdir/out.html" \
+    "pandia-serve local produces HTML output"
+
+  # Cleanup
+  kill "$serve_pid" 2>/dev/null; wait "$serve_pid" 2>/dev/null || true
+  rm -rf "$tmpdir"
+}
+test_local_serve_renders
+
 print_summary
 exit $FAIL

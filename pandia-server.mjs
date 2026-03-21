@@ -18,13 +18,21 @@
 
 import { createServer } from 'http'
 import { exec } from 'child_process'
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'fs'
+import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { randomBytes } from 'crypto'
+import { fileURLToPath } from 'url'
 
 const PORT = parseInt(process.env.PANDIA_PORT || '3300')
-const FILTER = '/usr/local/share/pandoc/filters/diagram-filter.lua'
+
+// Find diagram-filter.lua: relative to this script, or container path
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const FILTER = [
+  join(__dirname, 'diagram-filter.lua'),
+  '/usr/local/share/pandoc/filters/diagram-filter.lua',
+  join(__dirname, '..', 'share', 'pandia', 'diagram-filter.lua'),
+].find(p => existsSync(p)) || '/usr/local/share/pandoc/filters/diagram-filter.lua'
 
 function execAsync (cmd, opts) {
   return new Promise((resolve, reject) => {
