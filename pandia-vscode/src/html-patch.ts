@@ -35,10 +35,19 @@ export function patchHtmlForWebview(html: string): string {
       border-radius: 4px;
       padding: 8px;
     }
-    /* Proportional scaling for SVGs with fixed width/height */
+    /* Proportional scaling for diagram SVGs with fixed width/height */
     svg {
       max-width: 100%;
       height: auto !important;
+    }
+    /* Markmap SVGs must fill their container, not collapse to auto */
+    .markmap-container svg {
+      height: 100% !important;
+    }
+    /* Left-align display math (MathML block math is centered by default) */
+    math[display="block"] {
+      display: block !important;
+      text-align: left !important;
     }
   </style>`;
 

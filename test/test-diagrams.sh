@@ -675,5 +675,39 @@ Bob -> Alice: Hi
 }
 test_plantuml_no_preserveaspectratio_none
 
+# --- Markmap container height ---
+
+section "markmap: HTML container height"
+
+test_markmap_large_tree_height() {
+  local input='```markmap
+# Software Architecture
+## Frontend
+### Framework
+#### Vue.js
+#### Angular
+### Build Tools
+#### Vite
+## Backend
+### Languages
+#### Python
+#### Go
+### Databases
+#### PostgreSQL
+#### MongoDB
+## Infrastructure
+### CI/CD
+```'
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  echo "$input" | pandoc --lua-filter="$FILTER" --from=gfm -t html5 2>/dev/null > "$tmpdir/out" || true
+  local out
+  out=$(cat "$tmpdir/out")
+  rm -rf "$tmpdir"
+  assert_not_contains "$out" "height:400px" \
+    "Large markmap must not use small 400px height"
+}
+test_markmap_large_tree_height
+
 print_summary
 exit $FAIL

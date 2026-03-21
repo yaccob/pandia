@@ -44,6 +44,27 @@ describe('patchHtmlForWebview', () => {
       'must use VS Code background variable')
   })
 
+  it('left-aligns MathML display math', () => {
+    const mathHtml = `<html><head></head><body>
+      <math display="block"><mrow><mi>x</mi></mrow></math>
+    </body></html>`
+    const result = patchHtmlForWebview(mathHtml)
+    assert.match(result, /math\[display="block"\][^}]*text-align:\s*left/s,
+      'display math must be left-aligned')
+  })
+
+  it('does not override height of markmap SVGs', () => {
+    const markmapHtml = `<html><head></head><body>
+      <div class="markmap-container" style="height:800px">
+        <svg id="markmap-1" style="width:100%;height:100%"></svg>
+      </div>
+    </body></html>`
+    const result = patchHtmlForWebview(markmapHtml)
+    // The height:auto must NOT apply to markmap SVGs (they need height:100% to fill container)
+    assert.match(result, /\.markmap-container\s+svg[^}]*height:\s*100%/s,
+      'markmap SVGs must keep height:100% to fill their container')
+  })
+
   it('works without </head> tag (fallback)', () => {
     const noHead = '<h1>Hello</h1><svg width="50pt"></svg>'
     const result = patchHtmlForWebview(noHead)

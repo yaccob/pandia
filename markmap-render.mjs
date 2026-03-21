@@ -93,6 +93,15 @@ async function generateHtmlFragment (content, id) {
   const containerId = `markmap-${id}`
   const jsonData = JSON.stringify(root)
 
+  // Calculate container height based on tree size (count all nodes)
+  function countNodes (node) {
+    let n = 1
+    if (node.children) for (const c of node.children) n += countNodes(c)
+    return n
+  }
+  const nodeCount = countNodes(root)
+  const containerHeight = Math.max(400, Math.min(1200, nodeCount * 40))
+
   // Extract script URLs from assets
   const scriptUrls = []
   if (assets?.scripts) {
@@ -110,7 +119,7 @@ async function generateHtmlFragment (content, id) {
     )
   }
 
-  const fragment = `<div class="markmap-container" style="height:400px;margin:1em 0">
+  const fragment = `<div class="markmap-container" style="height:${containerHeight}px;margin:1em 0">
 <svg id="${containerId}" style="width:100%;height:100%"></svg>
 </div>
 <script>
