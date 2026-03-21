@@ -65,7 +65,11 @@ async function updatePreview(document: vscode.TextDocument) {
   if (document.languageId !== 'markdown') return;
 
   try {
-    const html = await client.preview(document.getText());
+    const config = vscode.workspace.getConfiguration('pandia');
+    const krokiServer = config.get<string>('krokiServer');
+    const html = await client.preview(document.getText(), {
+      kroki_server: krokiServer || undefined,
+    });
     if (previewPanel) {
       previewPanel.webview.html = patchHtmlForWebview(html);
     }

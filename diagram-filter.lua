@@ -38,25 +38,8 @@ local node_renderer_types = {
   nomnoml = true, dbml = true, d2 = true, wavedrom = true,
 }
 
--- Check if a node_renderer_type can actually run locally
-local node_renderer_avail_cache = {}
-local function node_renderer_available(dtype)
-  if node_renderer_avail_cache[dtype] ~= nil then
-    return node_renderer_avail_cache[dtype]
-  end
-  local avail = false
-  if dtype == "d2" then
-    -- D2 uses a CLI binary, not diagram-renderer.mjs
-    avail = os.execute("d2 --version >/dev/null 2>&1") == true
-  else
-    -- Other types need diagram-renderer.mjs
-    avail = diagram_renderer ~= nil
-  end
-  node_renderer_avail_cache[dtype] = avail
-  return avail
-end
-
 -- Path to diagram-renderer.mjs (resolve: env var, container path, relative to filter)
+-- Must be declared before node_renderer_available() which references it.
 local diagram_renderer = os.getenv("PANDIA_DIAGRAM_RENDERER")
 local function file_readable(path)
   local f = io.open(path, "r")
@@ -74,6 +57,22 @@ if not diagram_renderer then
   for _, path in ipairs(candidates) do
     if file_readable(path) then diagram_renderer = path; break end
   end
+end
+
+-- Check if a node_renderer_type can actually run locally
+local node_renderer_avail_cache = {}
+local function node_renderer_available(dtype)
+  if node_renderer_avail_cache[dtype] ~= nil then
+    return node_renderer_avail_cache[dtype]
+  end
+  local avail = false
+  if dtype == "d2" then
+    avail = os.execute("d2 --version >/dev/null 2>&1") == true
+  else
+    avail = diagram_renderer ~= nil
+  end
+  node_renderer_avail_cache[dtype] = avail
+  return avail
 end
 
 -- All Kroki-supported diagram types
@@ -241,7 +240,7 @@ local function prepare_tikz(code)
       tool = "tikz",
       outfile = pngfile,
       cmd = compile .. " || { rm -f " .. pdffile .. "; false; }"
-        .. " && gs -sDEVICE=pngalpha -r300 -dNOPAUSE -dBATCH -dQUIET"
+        .. " && gs -sDEVICE=png16m -r300 -dNOPAUSE -dBATCH -dQUIET"
         .. " -sOutputFile=" .. pngfile .. " " .. pdffile,
       cleanup = cleanup,
     }
@@ -673,7 +672,6 @@ local function pass1_CodeBlock(block)
   elseif lang == "tikz" then
     job = prepare_tikz(block.text)
   elseif node_renderer_types[lang] and node_renderer_available(lang) then
-    -- Rendered via diagram-renderer.mjs (npm packages / CLI tools)
     job = prepare_node_renderer(block.text, lang)
   elseif kroki_server and kroki_types[lang] then
     -- Not available locally but supported by Kroki

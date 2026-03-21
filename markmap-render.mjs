@@ -93,14 +93,9 @@ async function generateHtmlFragment (content, id) {
   const containerId = `markmap-${id}`
   const jsonData = JSON.stringify(root)
 
-  // Calculate container height based on tree size (count all nodes)
-  function countNodes (node) {
-    let n = 1
-    if (node.children) for (const c of node.children) n += countNodes(c)
-    return n
-  }
-  const nodeCount = countNodes(root)
-  const containerHeight = Math.max(400, Math.min(1200, nodeCount * 40))
+  // Initial height is generous; the client script will measure the actual
+  // rendered size (all nodes expanded) and shrink to fit.
+  const initialHeight = 2000
 
   // Extract script URLs from assets
   const scriptUrls = []
@@ -119,18 +114,34 @@ async function generateHtmlFragment (content, id) {
     )
   }
 
-  const fragment = `<div class="markmap-container" style="height:${containerHeight}px;margin:1em 0">
+  const fragment = `<div class="markmap-container" id="container-${containerId}" style="height:${initialHeight}px;margin:1em 0">
 <svg id="${containerId}" style="width:100%;height:100%"></svg>
 </div>
 <script>
 (function(){
   var scripts = ${JSON.stringify(scriptUrls)};
   var loaded = 0;
+  function fitContainer() {
+    // Measure actual rendered content and resize container to fit
+    var svg = document.querySelector("svg#${containerId}");
+    var g = svg && svg.querySelector("g");
+    if (!g) return;
+    var bbox = g.getBBox();
+    var height = Math.max(400, Math.ceil(bbox.height + 40));
+    var container = document.getElementById("container-${containerId}");
+    if (container) container.style.height = height + "px";
+  }
+  var instance;
   function onReady() {
     var data = ${jsonData};
     var mm = window.markmap;
     if (mm && mm.Markmap) {
-      mm.Markmap.create("svg#${containerId}", mm.deriveOptions ? mm.deriveOptions() : null, data);
+      instance = mm.Markmap.create("svg#${containerId}", mm.deriveOptions ? mm.deriveOptions() : null, data);
+      // After render + animation: resize container then re-center tree
+      setTimeout(function() {
+        fitContainer();
+        if (instance && instance.fit) instance.fit();
+      }, 500);
     }
   }
   function loadNext() {

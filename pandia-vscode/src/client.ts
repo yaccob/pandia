@@ -3,6 +3,7 @@ import { URL } from 'url';
 
 export interface PreviewOptions {
   maxwidth?: string;
+  kroki_server?: string;
 }
 
 export class PandiaClient {
@@ -28,6 +29,7 @@ export class PandiaClient {
 
     const params = new URLSearchParams();
     if (opts.maxwidth) params.set('maxwidth', opts.maxwidth);
+    if (opts.kroki_server) params.set('kroki_server', opts.kroki_server);
 
     const query = params.toString();
     const path = '/preview' + (query ? `?${query}` : '');

@@ -75,7 +75,7 @@ async function render (file, formats, maxwidth) {
   return formats.map(fmt => `${base}.${fmt}`)
 }
 
-async function preview (content, { maxwidth = '60em' } = {}) {
+async function preview (content, { maxwidth = '60em', kroki_server } = {}) {
   // Create isolated temp dir for this render
   const id = randomBytes(6).toString('hex')
   const workdir = join(tmpdir(), `pandia-preview-${id}`)
@@ -86,6 +86,7 @@ async function preview (content, { maxwidth = '60em' } = {}) {
   writeFileSync(infile, content)
 
   const env = { ...process.env, PANDIA_PARALLEL: '1' }
+  if (kroki_server) env.PANDIA_KROKI_URL = kroki_server
 
   // Use --mathml for server-side math rendering (no MathJax needed)
   // Use --embed-resources to inline all images as base64 data-URIs
@@ -180,6 +181,7 @@ const server = createServer(async (req, res) => {
       }
       const opts = {
         maxwidth: url.searchParams.get('maxwidth') || '60em',
+        kroki_server: url.searchParams.get('kroki_server') || undefined,
       }
       const html = await preview(content, opts)
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })

@@ -709,24 +709,15 @@ fi
 
 section "markmap: HTML container height"
 
-test_markmap_large_tree_height() {
+test_markmap_auto_fit() {
   local input='```markmap
 # Software Architecture
 ## Frontend
 ### Framework
 #### Vue.js
-#### Angular
-### Build Tools
-#### Vite
 ## Backend
 ### Languages
 #### Python
-#### Go
-### Databases
-#### PostgreSQL
-#### MongoDB
-## Infrastructure
-### CI/CD
 ```'
   local tmpdir
   tmpdir=$(mktemp -d)
@@ -734,10 +725,61 @@ test_markmap_large_tree_height() {
   local out
   out=$(cat "$tmpdir/out")
   rm -rf "$tmpdir"
-  assert_not_contains "$out" "height:400px" \
-    "Large markmap must not use small 400px height"
+  # Must contain fitContainer script for client-side height adjustment
+  assert_contains "$out" "fitContainer" \
+    "Markmap HTML includes fitContainer script for auto-sizing"
+  assert_contains "$out" "getBBox" \
+    "Markmap fitContainer uses getBBox to measure rendered content"
+  # After resizing, must call fit() to re-center the tree in the new container
+  assert_contains "$out" ".fit()" \
+    "Markmap calls fit() after resize to keep content visible"
 }
-test_markmap_large_tree_height
+test_markmap_auto_fit
+
+# --- TikZ background ---
+
+section "tikz: white background in HTML output"
+
+test_tikz_html_has_white_background() {
+  # Only run if pdflatex is available
+  if ! command -v pdflatex >/dev/null 2>&1; then
+    printf "  ${GREEN}SKIP${RESET} tikz background test: pdflatex not installed\n"
+    return
+  fi
+  local input='```tikz
+\begin{tikzpicture}
+\draw (0,0) -- (1,1) -- (2,0) -- cycle;
+\end{tikzpicture}
+```'
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  echo "$input" | pandoc --lua-filter="$FILTER" --from=gfm -t html5 2>/dev/null > "$tmpdir/out" || true
+  local out
+  out=$(cat "$tmpdir/out")
+
+  # Find the generated PNG and check if it has a white background
+  local imgfile
+  imgfile=$(echo "$out" | grep -o 'img/tikz-[^"]*\.png' | head -1)
+  if [[ -n "$imgfile" && -f "$imgfile" ]]; then
+    # Use identify to check if image has alpha channel (transparent)
+    if command -v identify >/dev/null 2>&1; then
+      local has_alpha
+      has_alpha=$(identify -verbose "$imgfile" 2>/dev/null | grep -c "Alpha" || true)
+      if [[ "$has_alpha" -eq 0 ]]; then
+        PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "TikZ PNG has no alpha channel (opaque background)"
+      else
+        FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "TikZ PNG has alpha channel (transparent background)"
+        ERRORS="${ERRORS}\n  FAIL: TikZ PNG has transparent background"
+      fi
+    else
+      printf "  ${GREEN}SKIP${RESET} TikZ background check: identify not installed\n"
+    fi
+  else
+    printf "  ${GREEN}SKIP${RESET} TikZ background check: no image generated\n"
+  fi
+  rm -rf "$tmpdir"
+}
+test_tikz_html_has_white_background
 
 print_summary
 exit $FAIL

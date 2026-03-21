@@ -36,6 +36,11 @@
           "type": "number",
           "default": 3300,
           "description": "Port for the pandia server."
+        },
+        "pandia.krokiServer": {
+          "type": "string",
+          "default": "",
+          "description": "Kroki server URL for additional diagram types (BPMN, ERD, Pikchr, etc.). Example: https://kroki.io"
         }
       }
     }

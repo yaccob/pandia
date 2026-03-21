@@ -26,6 +26,7 @@ start_serve() {
     -v "$PROJECT_DIR/pandia-server.mjs:/usr/local/share/pandia/pandia-server.mjs:ro" \
     -v "$PROJECT_DIR/diagram-filter.lua:/usr/local/share/pandoc/filters/diagram-filter.lua:ro" \
     -v "$PROJECT_DIR/markmap-render.mjs:/usr/local/share/pandia/markmap-render.mjs:ro" \
+    -v "$PROJECT_DIR/diagram-renderer.mjs:/usr/local/lib/node_modules/diagram-renderer.mjs:ro" \
     yaccob/pandia --serve "$SERVE_PORT" >/dev/null 2>&1
 
   local i=0
@@ -399,6 +400,37 @@ test_preview_wavedrom() {
   assert_not_contains "$out" "error" "/preview wavedrom has no error"
 }
 test_preview_wavedrom
+
+# --- Kroki via /preview ---
+
+section "serve: kroki_server query parameter"
+
+test_preview_kroki_pikchr() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview?kroki_server=https://kroki.io" \
+    --data-binary '```pikchr
+box "A"
+arrow
+box "B"
+```' 2>&1) || true
+  assert_contains "$out" "<svg" "/preview pikchr renders via kroki_server param"
+  assert_not_contains "$out" "error" "/preview pikchr has no error"
+}
+test_preview_kroki_pikchr
+
+test_preview_kroki_erd() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview?kroki_server=https://kroki.io" \
+    --data-binary '```erd
+[Person]
+*name
+height
+weight
+```' 2>&1) || true
+  assert_contains "$out" "<svg" "/preview erd renders via kroki_server param"
+  assert_not_contains "$out" "error" "/preview erd has no error"
+}
+test_preview_kroki_erd
 
 stop_serve
 
