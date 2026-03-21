@@ -34,11 +34,13 @@ curl -sf -X POST "http://localhost:${PORT}/render" -d "file=example.md&to=pdf&kr
 
 # Verify the rendered HTML has all diagram sections (including Kroki)
 printf "\n${BOLD}container: /render example.md completeness${RESET}\n"
-sleep 1
+sleep 3
 # Use heading IDs for reliable section matching (avoids line-wrap and duplicate issues)
 check_render_section() {
   local id="$1" label="$2"
-  if sed -n "/id=\"${id}/,/^<h[0-9]/p" example.html | grep -q '<svg\|<img'; then
+  local count
+  count=$(sed -n "/id=\"${id}/,/^<h[0-9]/p" example.html | grep -c '<svg\|<img' || true)
+  if [[ "$count" -gt 0 ]]; then
     ok "/render $label"
   else
     fail "/render $label not rendered"
