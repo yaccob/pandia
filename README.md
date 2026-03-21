@@ -143,11 +143,21 @@ as MathML. No files are written to disk. Designed for editor integrations
 like the VS Code extension.
 
 ```bash
-# Render a file on disk
-curl -X POST http://localhost:3300/render -d "file=example.md&to=pdf,html"
+# Render a file on disk → writes example.html and example.pdf into the mounted volume
+curl -X POST http://localhost:3300/render \
+  -d "file=example.md&to=pdf,html"
+# {"ok":true,"files":["example.html","example.pdf"]}
 
-# Live preview (stateless)
-curl -X POST http://localhost:3300/preview -d '# Hello World'
+# Live preview → returns self-contained HTML with inline SVGs
+curl -X POST http://localhost:3300/preview \
+  -H "Content-Type: text/plain" \
+  -d '# Hello
+
+$$E = mc^2$$
+
+```graphviz
+digraph { A -> B -> C; }
+```' > preview.html
 ```
 
 ### Examples
