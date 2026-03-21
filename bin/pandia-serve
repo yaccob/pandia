@@ -1,0 +1,89 @@
+#!/bin/sh
+set -e
+
+VERSION="1.7.0"
+
+usage() {
+  cat <<EOF
+pandia-serve v${VERSION} — Start the pandia HTTP rendering server
+
+Usage: pandia-serve [OPTIONS] [PORT]
+
+Options:
+  --kroki-server URL    Kroki server URL for additional diagram types
+  -h, --help            Show this help
+
+Environment:
+  PANDIA_KROKI_URL      Alternative to --kroki-server
+  PANDIA_PORT           Alternative to PORT argument (default: 3300)
+
+Examples:
+  pandia-serve                              # listen on port 3300
+  pandia-serve 8080                         # listen on port 8080
+  pandia-serve --kroki-server https://kroki.io
+
+Docker:
+  docker run -d -p 3300:3300 yaccob/pandia pandia-serve
+  docker run -d -p 3300:3300 -e PANDIA_KROKI_URL=http://kroki:8000 yaccob/pandia pandia-serve
+
+API:
+  POST /render    Markdown body → HTML or PDF response
+  GET  /health    → 200 "ok"
+
+  See openapi.yaml for full API documentation.
+EOF
+  exit 0
+}
+
+PORT=""
+KROKI_URL="${PANDIA_KROKI_URL:-}"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --kroki-server) KROKI_URL="$2"; shift 2 ;;
+    -h|--help)      usage ;;
+    -*)             echo "Unknown option: $1" >&2; usage ;;
+    *)              PORT="$1"; shift ;;
+  esac
+done
+
+if [ -n "$KROKI_URL" ]; then
+  export PANDIA_KROKI_URL="$KROKI_URL"
+fi
+
+if [ -n "$PORT" ]; then
+  export PANDIA_PORT="$PORT"
+fi
+
+# Find pandia-server.mjs
+SERVER_SCRIPT=""
+for dir in \
+  "$(dirname "$0")/../share/pandia" \
+  "/usr/local/share/pandia" \
+  "$(dirname "$0")/.."
+do
+  if [ -f "$dir/pandia-server.mjs" ]; then
+    SERVER_SCRIPT="$dir/pandia-server.mjs"
+    break
+  fi
+done
+
+if [ -z "$SERVER_SCRIPT" ]; then
+  echo "Error: pandia-server.mjs not found." >&2
+  exit 1
+fi
+
+# Start mermaid render server if available (keeps Chromium alive)
+MERMAID_SERVER_SCRIPT="/usr/local/lib/node_modules/@mermaid-js/mermaid-cli/mermaid-server.mjs"
+if [ -f "$MERMAID_SERVER_SCRIPT" ]; then
+  node "$MERMAID_SERVER_SCRIPT" &
+  for _ in $(seq 1 30); do
+    if [ -f /tmp/mermaid-server.ready ]; then break; fi
+    sleep 0.2
+  done
+  if [ -f /tmp/mermaid-server.ready ]; then
+    export MERMAID_SERVER="http://127.0.0.1:$(cat /tmp/mermaid-server.ready)"
+  fi
+fi
+
+exec node "$SERVER_SCRIPT"

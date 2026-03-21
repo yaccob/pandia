@@ -65,12 +65,14 @@ COPY mermaid-server.mjs /usr/local/lib/node_modules/@mermaid-js/mermaid-cli/merm
 COPY markmap-render.mjs /usr/local/share/pandia/markmap-render.mjs
 COPY diagram-renderer.mjs /usr/local/lib/node_modules/diagram-renderer.mjs
 
-# Pandia HTTP server
+# Pandia HTTP server and CLI
 COPY pandia-server.mjs /usr/local/share/pandia/pandia-server.mjs
+COPY bin/pandia-serve /usr/local/bin/pandia-serve
+COPY bin/pandia /usr/local/bin/pandia
 
 WORKDIR /data
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/pandia-serve /usr/local/bin/pandia
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

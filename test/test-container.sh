@@ -19,7 +19,7 @@ fail() { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "$1"; ERRORS="${
 $RT stop "$CONTAINER" >/dev/null 2>&1 || true
 $RT rm -f "$CONTAINER" >/dev/null 2>&1 || true
 $RT run --rm -d --name "$CONTAINER" -p "${PORT}:${PORT}" -v "$PWD:/data" \
-  "$IMAGE" --serve "$PORT" >/dev/null 2>&1
+  "$IMAGE" pandia-serve "$PORT" >/dev/null 2>&1
 
 for i in $(seq 1 30); do
   curl -sf "http://localhost:${PORT}/health" >/dev/null 2>&1 && break

@@ -1,13 +1,11 @@
 #!/bin/sh
 set -e
 
-VERSION="1.4.0"
-IMAGE="yaccob/pandia"
+VERSION="1.7.0"
 FILTER_NAME="diagram-filter.lua"
 
 # --- Detect filter location ---
 find_filter() {
-  # Check common install locations
   for dir in \
     "$(dirname "$0")/../share/pandia" \
     "$(dirname "$0")/.." \
@@ -23,27 +21,6 @@ find_filter() {
   return 1
 }
 
-# --- Check if local tools are available ---
-has_local_tools() {
-  command -v pandoc   >/dev/null 2>&1 && \
-  command -v plantuml >/dev/null 2>&1 && \
-  command -v dot      >/dev/null 2>&1 && \
-  command -v mmdc     >/dev/null 2>&1 && \
-  find_filter >/dev/null 2>&1
-}
-
-has_docker() {
-  command -v docker >/dev/null 2>&1 || command -v podman >/dev/null 2>&1
-}
-
-get_docker() {
-  if command -v docker >/dev/null 2>&1; then
-    echo "docker"
-  elif command -v podman >/dev/null 2>&1; then
-    echo "podman"
-  fi
-}
-
 # --- Usage ---
 usage() {
   cat <<EOF
@@ -53,20 +30,24 @@ Usage: pandia [OPTIONS] <input.md>
 
 Options:
   -t, --to FORMAT       Output format: pdf, html (default: html; repeatable)
-  --watch               Watch for changes and regenerate automatically
-  --serve [PORT]        Start persistent server (Docker mode, default port: 3300)
   -o, --output NAME     Base name for output files (default: derived from input)
+  --watch               Watch for changes and regenerate automatically
+  --server URL          Use a pandia server instead of local tools
   --maxwidth WIDTH      Max content width for HTML output (default: 60em)
   --center-math         Center block formulas (default: left-aligned)
-  --kroki               Enable Kroki for additional diagram types (uses \$PANDIA_KROKI_URL)
-  --kroki-server URL    Enable Kroki with explicit server URL
-  --docker              Force Docker mode (skip local tools)
-  --local               Force local mode (fail if tools missing)
+  --kroki-server URL    Enable Kroki for additional diagram types (local mode only)
   -v, --version         Show version
   -h, --help            Show this help
 
-Local diagram types: plantuml, graphviz/dot, mermaid, ditaa, tikz, dir
-With Kroki: + bpmn, d2, dbml, erd, excalidraw, nomnoml, svgbob, vega, wavedrom, ...
+Modes:
+  Without --server:     Renders locally (requires pandoc + tools installed)
+  With --server URL:    Sends Markdown to a pandia server via HTTP
+
+  To start a server:    pandia-serve [PORT]
+
+Diagram types: plantuml, graphviz/dot, mermaid, markmap, ditaa, tikz,
+  nomnoml, dbml, d2, wavedrom, dir
+With Kroki: + bpmn, erd, pikchr, svgbob, excalidraw, vega, ...
 LaTeX math: \$...\$ (inline) and \$\$...\$\$ (block)
 EOF
   exit 0
@@ -76,14 +57,12 @@ EOF
 FORMAT_PDF=false
 FORMAT_HTML=false
 WATCH=false
-SERVE=false
-SERVE_PORT="3300"
+SERVER_URL=""
 OUTPUT_BASE=""
 MAXWIDTH="60em"
 CENTER_MATH=false
 KROKI_URL=""
 INPUT=""
-FORCE_MODE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -94,49 +73,18 @@ while [ $# -gt 0 ]; do
         *)    echo "Error: Unknown format '$2'. Use 'pdf' or 'html'." >&2; exit 1 ;;
       esac
       shift 2 ;;
-    --watch)      WATCH=true; shift ;;
-    --serve)      SERVE=true
-                  if [ -n "$2" ] && [ "${2#-}" = "$2" ] 2>/dev/null; then
-                    SERVE_PORT="$2"; shift
-                  fi
-                  shift ;;
-    -o|--output)  OUTPUT_BASE="$2"; shift 2 ;;
-    --maxwidth)   MAXWIDTH="$2"; shift 2 ;;
-    --center-math) CENTER_MATH=true; shift ;;
-    --kroki)      KROKI_URL="${PANDIA_KROKI_URL:-}"; shift
-                  if [ -z "$KROKI_URL" ]; then
-                    echo "Error: --kroki requires PANDIA_KROKI_URL to be set." >&2
-                    echo "Example: export PANDIA_KROKI_URL=https://kroki.io" >&2
-                    exit 1
-                  fi ;;
+    --watch)        WATCH=true; shift ;;
+    --server)       SERVER_URL="$2"; shift 2 ;;
+    -o|--output)    OUTPUT_BASE="$2"; shift 2 ;;
+    --maxwidth)     MAXWIDTH="$2"; shift 2 ;;
+    --center-math)  CENTER_MATH=true; shift ;;
     --kroki-server) KROKI_URL="$2"; shift 2 ;;
-    --docker)     FORCE_MODE="docker"; shift ;;
-    --local)      FORCE_MODE="local"; shift ;;
-    -v|--version) echo "pandia v${VERSION}"; exit 0 ;;
-    -h|--help)    usage ;;
-    -*)           echo "Unknown option: $1" >&2; usage ;;
-    *)            INPUT="$1"; shift ;;
+    -v|--version)   echo "pandia v${VERSION}"; exit 0 ;;
+    -h|--help)      usage ;;
+    -*)             echo "Unknown option: $1" >&2; echo "Run 'pandia --help' for usage." >&2; exit 1 ;;
+    *)              INPUT="$1"; shift ;;
   esac
 done
-
-# Export Kroki URL for Lua filter
-if [ -n "$KROKI_URL" ]; then
-  export PANDIA_KROKI_URL="$KROKI_URL"
-fi
-
-# Handle --serve mode (Docker only, no input file needed)
-if [ "$SERVE" = true ]; then
-  if ! has_docker; then
-    echo "Error: --serve requires Docker or Podman." >&2
-    exit 1
-  fi
-  DOCKER="$(get_docker)"
-  echo "Starting pandia server on port $SERVE_PORT ..."
-  echo "Usage: curl -X POST http://localhost:$SERVE_PORT/render -d 'file=example.md&to=html,pdf'"
-  echo "Stop:  $DOCKER stop pandia && $DOCKER rm pandia"
-  exec $DOCKER run --rm --name pandia -p "${SERVE_PORT}:${SERVE_PORT}" \
-    -v "$(pwd):/data" "${IMAGE}:${VERSION}" --serve "$SERVE_PORT"
-fi
 
 if [ -z "$INPUT" ]; then
   echo "Error: No input file specified." >&2
@@ -159,64 +107,56 @@ if [ -z "$OUTPUT_BASE" ]; then
   OUTPUT_BASE="$(basename "$INPUT" .md)"
 fi
 
-# --- Determine mode ---
-MODE=""
-if [ "$FORCE_MODE" = "docker" ]; then
-  if ! has_docker; then
-    echo "Error: --docker specified but neither docker nor podman found." >&2
-    exit 1
-  fi
-  MODE="docker"
-elif [ "$FORCE_MODE" = "local" ]; then
-  if ! has_local_tools; then
-    echo "Error: --local specified but required tools are missing." >&2
-    echo "Required: pandoc, plantuml, dot (graphviz), mmdc (mermaid-cli)" >&2
-    exit 1
-  fi
-  MODE="local"
-elif has_local_tools; then
-  MODE="local"
-elif has_docker; then
-  MODE="docker"
-else
-  echo "Error: Neither local tools nor Docker/Podman found." >&2
-  echo "" >&2
-  echo "Install locally (macOS):  brew install yaccob/tap/pandia" >&2
-  echo "Or use Docker:            docker pull ${IMAGE}" >&2
-  exit 1
-fi
-
-# --- Build format flags ---
-build_format_flags() {
-  flags=""
-  if [ "$FORMAT_PDF" = true ]; then
-    flags="$flags -t pdf"
-  fi
-  if [ "$FORMAT_HTML" = true ]; then
-    flags="$flags -t html"
-  fi
-  if [ -n "$OUTPUT_BASE" ]; then
-    flags="$flags -o $OUTPUT_BASE"
-  fi
-  if [ "$MAXWIDTH" != "60em" ]; then
-    flags="$flags --maxwidth $MAXWIDTH"
-  fi
+# --- Server mode: send to pandia server via HTTP ---
+run_server() {
+  local fmt="$1"
+  local params="format=${fmt}&maxwidth=${MAXWIDTH}"
   if [ "$CENTER_MATH" = true ]; then
-    flags="$flags --center-math"
+    params="${params}&center_math=true"
   fi
-  if [ -n "$KROKI_URL" ]; then
-    flags="$flags --kroki-server $KROKI_URL"
+
+  local output_file="${OUTPUT_BASE}.${fmt}"
+  echo "Generating ${output_file} ..."
+
+  local http_code
+  http_code=$(curl -sf -w "%{http_code}" \
+    -X POST "${SERVER_URL}/render?${params}" \
+    --data-binary @"$INPUT" \
+    -o "$output_file" 2>/dev/null) || true
+
+  if [ "$http_code" != "200" ]; then
+    echo "Error: Server returned HTTP $http_code" >&2
+    # Try to read error message from response
+    if [ -f "$output_file" ]; then
+      cat "$output_file" >&2
+      rm -f "$output_file"
+    fi
+    return 1
   fi
-  echo "$flags"
+  echo "  -> $output_file"
 }
 
-# --- Local execution ---
-run_local() {
-  FILTER="$(find_filter)"
-  PANDOC_COMMON="--lua-filter=$FILTER --from=gfm+tex_math_dollars"
-  INPUT_ABS="$(cd "$(dirname "$INPUT")" && pwd)/$(basename "$INPUT")"
+run_server_all() {
+  if [ "$FORMAT_PDF" = true ]; then
+    run_server pdf
+  fi
+  if [ "$FORMAT_HTML" = true ]; then
+    run_server html
+  fi
+}
 
-  # Math alignment: left-aligned by default, centered with --center-math
+# --- Local mode: call pandoc directly ---
+run_local() {
+  FILTER="$(find_filter)" || {
+    echo "Error: Lua filter not found. Install pandia or use --server." >&2
+    exit 1
+  }
+  PANDOC_COMMON="--lua-filter=$FILTER --from=gfm+tex_math_dollars"
+
+  if [ -n "$KROKI_URL" ]; then
+    export PANDIA_KROKI_URL="$KROKI_URL"
+  fi
+
   MATH_PDF_FLAGS=""
   MATH_HTML_FLAGS=""
   if [ "$CENTER_MATH" = false ]; then
@@ -249,25 +189,10 @@ run_local() {
   fi
 }
 
-# --- Docker execution ---
-run_docker() {
-  DOCKER="$(get_docker)"
-  INPUT_DIR="$(cd "$(dirname "$INPUT")" && pwd)"
-  INPUT_FILE="$(basename "$INPUT")"
-  FLAGS="$(build_format_flags)"
-
-  $DOCKER run --rm -v "${INPUT_DIR}:/data" "${IMAGE}:${VERSION}" $FLAGS "$INPUT_FILE"
-}
-
 # --- Watch mode ---
 run_watch() {
   echo "Watching '$INPUT' for changes (Ctrl+C to stop) ..."
-  echo "Mode: $MODE"
-  echo ""
-
-  # Initial build
   run_once
-
   LAST_HASH=""
   while true; do
     HASH="$(md5sum "$INPUT" 2>/dev/null || md5 -q "$INPUT" 2>/dev/null || stat -f%m "$INPUT" 2>/dev/null || stat -c%Y "$INPUT" 2>/dev/null)"
@@ -283,10 +208,10 @@ run_watch() {
 
 # --- Dispatch ---
 run_once() {
-  if [ "$MODE" = "local" ]; then
-    run_local
+  if [ -n "$SERVER_URL" ]; then
+    run_server_all
   else
-    run_docker
+    run_local
   fi
 }
 

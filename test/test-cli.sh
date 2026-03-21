@@ -8,7 +8,7 @@ test_cli_version_long() {
   local out
   out=$("$PANDIA" --version 2>&1)
   assert_contains "$out" "pandia v" "--version shows version string"
-  assert_contains "$out" "1.4.0" "--version shows correct version number"
+  assert_contains "$out" "1.7.0" "--version shows correct version number"
 }
 test_cli_version_long
 
@@ -26,7 +26,7 @@ test_cli_help_long() {
   assert_contains "$out" "Options:" "--help shows options"
   assert_contains "$out" "-t, --to" "--help documents -t flag"
   assert_contains "$out" "--watch" "--help documents --watch"
-  assert_contains "$out" "--serve" "--help documents --serve"
+  assert_contains "$out" "--server" "--help documents --server"
   assert_contains "$out" "--kroki" "--help documents --kroki"
 }
 test_cli_help_long
@@ -66,13 +66,13 @@ test_cli_unknown_format() {
 }
 test_cli_unknown_format
 
-test_cli_kroki_no_env() {
+test_cli_unknown_option() {
   local out rc
-  out=$(PANDIA_KROKI_URL="" "$PANDIA" --kroki test.md 2>&1) && rc=0 || rc=$?
-  assert_contains "$out" "PANDIA_KROKI_URL" "--kroki without env var mentions the variable"
+  out=$("$PANDIA" --bogus test.md 2>&1) && rc=0 || rc=$?
+  assert_contains "$out" "Unknown option" "Unknown option shows error"
   assert_exit_nonzero "$rc" "Non-zero exit code"
 }
-test_cli_kroki_no_env
+test_cli_unknown_option
 
 section "cli: local rendering"
 
@@ -80,7 +80,7 @@ test_cli_html_output() {
   local tmpdir out
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  out=$("$PANDIA" -t html -o "$tmpdir/out" --local "$tmpdir/input.md" 2>&1)
+  out=$("$PANDIA" -t html -o "$tmpdir/out" "$tmpdir/input.md" 2>&1)
   assert_contains "$out" "Generating" "Shows generating message"
   assert_file_exists "$tmpdir/out.html" "HTML file created"
   rm -rf "$tmpdir"
@@ -91,7 +91,7 @@ test_cli_pdf_output() {
   local tmpdir out
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  out=$("$PANDIA" -t pdf -o "$tmpdir/out" --local "$tmpdir/input.md" 2>&1)
+  out=$("$PANDIA" -t pdf -o "$tmpdir/out" "$tmpdir/input.md" 2>&1)
   assert_contains "$out" "Generating" "Shows generating message"
   assert_file_exists "$tmpdir/out.pdf" "PDF file created"
   rm -rf "$tmpdir"
@@ -102,7 +102,7 @@ test_cli_both_formats() {
   local tmpdir out
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  out=$("$PANDIA" -t pdf -t html -o "$tmpdir/out" --local "$tmpdir/input.md" 2>&1)
+  out=$("$PANDIA" -t pdf -t html -o "$tmpdir/out" "$tmpdir/input.md" 2>&1)
   assert_file_exists "$tmpdir/out.html" "HTML file created with -t pdf -t html"
   assert_file_exists "$tmpdir/out.pdf" "PDF file created with -t pdf -t html"
   rm -rf "$tmpdir"
@@ -113,7 +113,7 @@ test_cli_default_format_is_html() {
   local tmpdir out
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  out=$("$PANDIA" -o "$tmpdir/out" --local "$tmpdir/input.md" 2>&1)
+  out=$("$PANDIA" -o "$tmpdir/out" "$tmpdir/input.md" 2>&1)
   assert_file_exists "$tmpdir/out.html" "Default format is HTML"
   [[ ! -f "$tmpdir/out.pdf" ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "No PDF created when no -t pdf"; } \
     || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "No PDF created when no -t pdf"; ERRORS="${ERRORS}\n  FAIL: Unexpected PDF created"; }
@@ -125,7 +125,7 @@ test_cli_output_name_derived() {
   local tmpdir out
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/myfile.md"
-  out=$(cd "$tmpdir" && "$PANDIA" --local myfile.md 2>&1)
+  out=$(cd "$tmpdir" && "$PANDIA" myfile.md 2>&1)
   assert_file_exists "$tmpdir/myfile.html" "Output name derived from input filename"
   rm -rf "$tmpdir"
 }
@@ -137,7 +137,7 @@ test_cli_maxwidth() {
   local tmpdir
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  "$PANDIA" -t html -o "$tmpdir/out" --maxwidth 40em --local "$tmpdir/input.md" >/dev/null 2>&1
+  "$PANDIA" -t html -o "$tmpdir/out" --maxwidth 40em "$tmpdir/input.md" >/dev/null 2>&1
   local content
   content=$(cat "$tmpdir/out.html")
   assert_contains "$content" "40em" "Custom maxwidth appears in HTML output"
@@ -149,7 +149,7 @@ test_cli_maxwidth_default() {
   local tmpdir
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  "$PANDIA" -t html -o "$tmpdir/out" --local "$tmpdir/input.md" >/dev/null 2>&1
+  "$PANDIA" -t html -o "$tmpdir/out" "$tmpdir/input.md" >/dev/null 2>&1
   local content
   content=$(cat "$tmpdir/out.html")
   assert_contains "$content" "60em" "Default maxwidth 60em in HTML output"
@@ -163,7 +163,7 @@ test_cli_center_math_html() {
   local tmpdir
   tmpdir=$(mktemp -d)
   printf '# Math\n\n$$x^2$$\n' > "$tmpdir/input.md"
-  "$PANDIA" -t html -o "$tmpdir/out" --center-math --local "$tmpdir/input.md" >/dev/null 2>&1
+  "$PANDIA" -t html -o "$tmpdir/out" --center-math "$tmpdir/input.md" >/dev/null 2>&1
   local content
   content=$(cat "$tmpdir/out.html")
   assert_not_contains "$content" "displayAlign" "--center-math omits left-align MathJax config"
@@ -175,7 +175,7 @@ test_cli_default_left_align_math() {
   local tmpdir
   tmpdir=$(mktemp -d)
   printf '# Math\n\n$$x^2$$\n' > "$tmpdir/input.md"
-  "$PANDIA" -t html -o "$tmpdir/out" --local "$tmpdir/input.md" >/dev/null 2>&1
+  "$PANDIA" -t html -o "$tmpdir/out" "$tmpdir/input.md" >/dev/null 2>&1
   local content
   content=$(cat "$tmpdir/out.html")
   assert_contains "$content" "displayAlign" "Default math is left-aligned (MathJax displayAlign)"
@@ -197,7 +197,7 @@ if $KROKI_AVAILABLE; then
     printf '# Kroki\n\n```pikchr\nbox "A"; arrow; box "B"\n```\n' > "$tmpdir/input.md"
     cp "$FILTER" "$tmpdir/"
     local out
-    out=$(cd "$tmpdir" && "$PANDIA" -t html -o "$tmpdir/out" --kroki-server https://kroki.io --local input.md 2>&1) || true
+    out=$(cd "$tmpdir" && "$PANDIA" -t html -o "$tmpdir/out" --kroki-server https://kroki.io input.md 2>&1) || true
     assert_file_exists "$tmpdir/out.html" "--kroki-server produces HTML output"
     local content
     content=$(cat "$tmpdir/out.html" 2>/dev/null) || true
@@ -210,21 +210,41 @@ else
   printf "  ${RED}SKIP${RESET} --kroki-server test: kroki.io not reachable\n"
 fi
 
-section "cli: --docker flag"
+section "cli: --server flag"
 
+# Test --server mode against a running container (if available)
 if [[ -n "$CONTAINER_RT" ]]; then
-  test_cli_docker_flag() {
-    local tmpdir out
+  test_cli_server_flag() {
+    local tmpdir port container_name
     tmpdir=$(mktemp -d)
-    echo '# Docker mode' > "$tmpdir/input.md"
-    out=$("$PANDIA" --docker -t html "$tmpdir/input.md" 2>&1) || true
-    assert_file_exists "$tmpdir/input.html" "--docker flag produces output via container"
+    port=13399
+    container_name="pandia-test-server-flag"
+    echo '# Server mode test' > "$tmpdir/input.md"
+
+    # Start server
+    $CONTAINER_RT stop "$container_name" >/dev/null 2>&1 || true
+    $CONTAINER_RT rm -f "$container_name" >/dev/null 2>&1 || true
+    $CONTAINER_RT run --rm -d --name "$container_name" -p "${port}:${port}" \
+      yaccob/pandia:latest pandia-serve "$port" >/dev/null 2>&1
+    local i=0
+    while [[ $i -lt 30 ]]; do
+      curl -sf "http://localhost:${port}/health" >/dev/null 2>&1 && break
+      sleep 1; i=$((i + 1))
+    done
+
+    # Render via --server
+    local out
+    out=$("$PANDIA" --server "http://localhost:${port}" -t html -o "$tmpdir/out" "$tmpdir/input.md" 2>&1) || true
+    assert_file_exists "$tmpdir/out.html" "--server produces HTML output"
+
+    # Cleanup
+    $CONTAINER_RT stop "$container_name" >/dev/null 2>&1 || true
     rm -rf "$tmpdir"
   }
-  test_cli_docker_flag
+  test_cli_server_flag
 else
-  printf "\n${BOLD}cli: --docker flag${RESET}\n"
-  printf "  ${RED}SKIP${RESET} --docker flag test: no container runtime found\n"
+  printf "\n${BOLD}cli: --server flag${RESET}\n"
+  printf "  ${RED}SKIP${RESET} --server test: no container runtime found\n"
 fi
 
 print_summary
