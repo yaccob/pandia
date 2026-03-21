@@ -39,6 +39,7 @@ The extension automatically starts a pandia container if no server is running.
 | `pandia.serverUrl` | *(empty)* | URL of a running pandia server. If empty, a container is started automatically. |
 | `pandia.containerImage` | `yaccob/pandia:latest` | Docker/Podman image to use. |
 | `pandia.port` | `3300` | Port for the pandia server. |
+| `pandia.krokiServer` | *(empty)* | Kroki server URL for additional diagram types (BPMN, ERD, Pikchr, etc.). Example: `https://kroki.io` |
 
 ### Using an existing server
 
@@ -55,7 +56,7 @@ If you already have a pandia server running (e.g. on a remote machine):
 ```
 VS Code                          pandia container
 ┌─────────────┐                 ┌──────────────────┐
-│ Editor      │                 │ POST /preview     │
+│ Editor      │                 │ POST /render      │
 │ (Markdown)  │── HTTP POST ──→│ pandoc + filter   │
 │             │    raw text     │ → HTML + inline   │
 │ Webview     │◄── HTML ───────│   SVGs + MathML   │
@@ -63,6 +64,7 @@ VS Code                          pandia container
 └─────────────┘                 └──────────────────┘
 ```
 
-The extension sends the Markdown content to the pandia server's `/preview` endpoint.
-The server renders it with Pandoc and the diagram filter, embedding all images as
-inline SVGs and math as MathML. The result is displayed in a VS Code Webview panel.
+The extension sends the Markdown content to the pandia server's `POST /render`
+endpoint with `math=mathml`. The server renders it with Pandoc and the diagram
+filter, embedding all images as inline SVGs and math as MathML. The result is
+displayed in a VS Code Webview panel.

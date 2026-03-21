@@ -37,7 +37,7 @@ Most diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zo
 | D2         | `` ```d2 ``         | Vector (PDF/SVG)          |
 | WaveDrom   | `` ```wavedrom ``   | Vector (PDF/SVG)          |
 
-**Kroki-powered** (requires `--kroki` flag or `--kroki-server URL`)
+**Kroki-powered** (requires `--kroki-server URL`)
 
 | Feature    | Code Block Syntax   | Output Format             |
 |------------|---------------------|---------------------------|
@@ -49,7 +49,7 @@ Most diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zo
 
 > **Note:** Container-native types (Nomnoml, DBML, D2, WaveDrom) are always available
 > in the Docker/Podman image. When running locally without these tools installed,
-> they fall back to Kroki automatically if `--kroki` or `--kroki-server` is configured.
+> they fall back to Kroki automatically if `--kroki-server` is configured.
 
 ## Installation
 
@@ -71,13 +71,13 @@ curl -fsSL https://raw.githubusercontent.com/yaccob/pandia/master/install.sh | s
 
 Installs the `pandia` script to `~/.local/bin`. You still need either:
 - **Local tools:** `pandoc`, `plantuml`, `dot`, `mmdc`, `rsvg-convert`, `pdflatex`
-- **Or just Docker/Podman** — pandia uses it as automatic fallback
+- **Or just Docker/Podman** — use with `--server` or `pandia-serve`
 
 ### Docker Only
 
 ```bash
 docker pull yaccob/pandia
-docker run --rm -v "$PWD:/data" yaccob/pandia -t pdf -t html myfile.md
+docker run --rm -v "$PWD:/data" yaccob/pandia -t pdf -o output.pdf myfile.md
 ```
 
 ### VS Code Extension
@@ -97,98 +97,124 @@ See [pandia-vscode/README.md](pandia-vscode/README.md) for details.
 pandia [OPTIONS] <input.md>
 
 Options:
-  -t, --to FORMAT       Output format: pdf, html (default: html; repeatable)
-  --watch               Watch for changes and regenerate automatically
-  --serve [PORT]        Start HTTP API server (Docker mode, default port: 3300)
-                        (other options do not apply in server mode)
-  -o, --output NAME     Base name for output files (default: derived from input)
+  -t, --to FORMAT       Output format: pdf, html (default: html)
+  -o, --output FILE     Write output to FILE (default: stdout)
+  --watch               Watch for changes and regenerate (requires -o)
+  --server URL          Use a pandia server instead of local tools
   --maxwidth WIDTH      Max content width for HTML output (default: 60em)
   --center-math         Center block formulas (default: left-aligned)
-  --kroki               Enable Kroki for additional diagram types (uses $PANDIA_KROKI_URL)
-  --kroki-server URL    Enable Kroki with explicit server URL
-  --docker              Force Docker mode (skip local tools)
-  --local               Force local mode (fail if tools missing)
+  --kroki-server URL    Enable Kroki for additional diagram types (local mode only)
   -v, --version         Show version
   -h, --help            Show this help
 ```
 
-### Server Mode (`--serve`)
+### Output Modes
 
-`--serve` starts pandia as an HTTP server inside a Docker/Podman container.
-CLI options like `-t`, `-o`, `--watch`, `--maxwidth`, `--center-math` do **not**
-apply in server mode — rendering parameters are passed per-request via the API.
+Without `-o`, pandia writes the rendered document to **stdout** — ideal for piping:
 
 ```bash
-docker run -d -p 3300:3300 -v "$PWD:/data" --name pandia yaccob/pandia --serve
+pandia myfile.md > output.html
+pandia -t pdf myfile.md > output.pdf
+pandia myfile.md | less
+```
+
+With `-o FILE`, pandia writes to a file and shows progress on stderr:
+
+```bash
+pandia -o report.html myfile.md
+pandia -t pdf -o report.pdf myfile.md
+```
+
+### Server Mode
+
+pandia can use a remote server for rendering instead of local tools.
+
+**Start a server:**
+
+```bash
+# Locally
+pandia-serve 3300
+
+# Via Docker/Podman
+docker run -d -p 3300:3300 yaccob/pandia pandia-serve 3300
+```
+
+**Use a server:**
+
+```bash
+pandia --server http://localhost:3300 myfile.md > output.html
+pandia --server http://localhost:3300 -t pdf -o output.pdf myfile.md
 ```
 
 ### HTTP API
 
-The server exposes three endpoints. See [`openapi.yaml`](openapi.yaml) for the
+The server exposes two endpoints. See [`openapi.yaml`](openapi.yaml) for the
 full OpenAPI 3.0 specification.
 
 | Endpoint | Method | Input | Output | Use Case |
 |----------|--------|-------|--------|----------|
 | `/health` | GET | — | `ok` (text) | Health check / readiness probe |
-| `/render` | GET, POST | File path on disk | JSON with generated file paths | Batch rendering, CI pipelines |
-| `/preview` | POST | Raw Markdown (body) | Self-contained HTML | Live preview, editor integrations |
+| `/render` | POST | Raw Markdown (body) | HTML or PDF (binary) | Rendering, editor integrations |
 
-**`/render`** reads a `.md` file from the container's `/data` volume, writes
-output files (`.html`, `.pdf`) next to it, and returns the list of generated
-file paths. The container must be started with `-v "$PWD:/data"`.
+**`POST /render`** accepts raw Markdown as the request body and returns the
+rendered document directly. All images are inlined (self-contained HTML).
+Query parameters control the output:
 
-**`/preview`** is stateless: it accepts raw Markdown as the request body and
-returns self-contained HTML with all images inlined as SVG and math rendered
-as MathML. No files are written to disk. Designed for editor integrations
-like the VS Code extension.
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `format` | `html`, `pdf` | `html` | Output format |
+| `math` | `mathjax`, `mathml` | `mathjax` | Math rendering engine |
+| `maxwidth` | CSS value | `60em` | Max content width (HTML) |
+| `center_math` | `true`, `false` | `false` | Center display math |
+| `kroki_server` | URL | — | Kroki server for extra diagram types |
 
 ```bash
-# Render a file on disk → writes example.html and example.pdf into the mounted volume
+# Render to HTML
 curl -X POST http://localhost:3300/render \
-  -d "file=example.md&to=pdf,html"
-# {"ok":true,"files":["example.html","example.pdf"]}
+  --data-binary @myfile.md > output.html
 
-# Live preview → returns self-contained HTML with inline SVGs
-curl -X POST http://localhost:3300/preview \
-  -H "Content-Type: text/plain" \
-  -d '# Hello
+# Render to PDF
+curl -X POST "http://localhost:3300/render?format=pdf" \
+  --data-binary @myfile.md > output.pdf
 
-$$E = mc^2$$
-
-```graphviz
-digraph { A -> B -> C; }
-```' > preview.html
+# With Kroki diagrams
+curl -X POST "http://localhost:3300/render?kroki_server=https://kroki.io" \
+  --data-binary @myfile.md > output.html
 ```
 
 ### Examples
 
 ```bash
-# Generate HTML (default)
-pandia myfile.md
+# Generate HTML to stdout (default)
+pandia myfile.md > output.html
 
-# Generate PDF
-pandia -t pdf myfile.md
+# Generate PDF to stdout
+pandia -t pdf myfile.md > output.pdf
 
-# Generate both PDF and HTML
-pandia -t pdf -t html myfile.md
+# Write to file with progress output on stderr
+pandia -o report.html myfile.md
+pandia -t pdf -o report.pdf myfile.md
 
-# Watch mode — regenerate on every save
-pandia --watch -t pdf -t html myfile.md
+# Watch mode — regenerate on every save (requires -o)
+pandia --watch -o report.html myfile.md
 
-# Custom output name
-pandia -t pdf -o report myfile.md
+# Custom max width
+pandia --maxwidth 40em myfile.md > output.html
 
 # Center block formulas (default is left-aligned)
-pandia --center-math -t pdf myfile.md
+pandia --center-math -t pdf -o report.pdf myfile.md
 
 # Enable Kroki diagram types (BPMN, D2, ERD, ...)
-pandia --kroki-server https://kroki.io -t html myfile.md
+pandia --kroki-server https://kroki.io myfile.md > output.html
 
-# Force Docker even if local tools are available
-pandia --docker -t pdf myfile.md
+# Use a pandia server
+pandia --server http://localhost:3300 -o output.html myfile.md
 
-# Start as HTTP server (Docker mode)
-docker run -d -p 3300:3300 -v "$PWD:/data" --name pandia yaccob/pandia --serve
+# Docker: render to file
+docker run --rm -v "$PWD:/data" yaccob/pandia -t pdf -o output.pdf myfile.md
+
+# Docker: start server
+docker run -d -p 3300:3300 yaccob/pandia pandia-serve 3300
 ```
 
 ## Example Document
@@ -281,11 +307,9 @@ Supported tools are called directly as subprocesses — PlantUML, Graphviz, Merm
 Markmap, TikZ (via pdflatex), and a Node.js-based renderer for Nomnoml, DBML, D2, and
 WaveDrom. All diagram groups run concurrently for fast rendering.
 
-- **Local mode:** Calls tools directly — fast, no overhead
-- **Docker mode:** Runs everything in a self-contained container — no setup required
-- **Server mode:** HTTP API for integration with editors and CI pipelines
-
-The CLI automatically detects which mode to use: local tools if available, Docker as fallback.
+- **Local mode** (`pandia`): Calls tools directly — fast, no overhead
+- **Server mode** (`pandia --server URL`): Delegates rendering to a pandia server
+- **Docker** (`pandia-serve`): HTTP API for integration with editors and CI pipelines
 
 ## Why "pandia"?
 
