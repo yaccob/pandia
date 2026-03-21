@@ -51,6 +51,7 @@ test-quick:
 	bash test/test-diagrams.sh
 	bash test/test-robustness.sh
 	bash test/test-cli.sh
+	bash test/test-docs.sh
 
 # --- Full pre-commit test suite ---
 
@@ -80,13 +81,10 @@ vscode-install: vscode-ext
 # --- Docker targets ---
 
 docker-pdf:
-	docker run --rm -v "$$PWD:/data" $(IMAGE) -t pdf $(SRC)
+	docker run --rm -v "$$PWD:/data" $(IMAGE) -t pdf -o $(PDF) $(SRC)
 
 docker-html:
-	docker run --rm -v "$$PWD:/data" $(IMAGE) -t html $(SRC)
-
-docker-all:
-	docker run --rm -v "$$PWD:/data" $(IMAGE) -t pdf -t html $(SRC)
+	docker run --rm -v "$$PWD:/data" $(IMAGE) -t html -o $(HTML) $(SRC)
 
 docker-build:
 	$(CONTAINER_RT) build -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .

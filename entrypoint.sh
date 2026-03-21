@@ -24,8 +24,8 @@ Usage: docker run --rm -v "$PWD:/data" yaccob/pandia [OPTIONS] <input.md>
        docker run -d -p 3300:3300 yaccob/pandia pandia-serve [PORT]
 
 Render options:
-  -t, --to FORMAT       Output format: pdf, html (default: html; repeatable)
-  -o, --output NAME     Base name for output files (default: derived from input)
+  -t, --to FORMAT       Output format: pdf, html (default: html)
+  -o, --output FILE     Write output to FILE (default: stdout)
   --maxwidth WIDTH      Max content width for HTML output (default: 60em)
   --center-math         Center block formulas (default: left-aligned)
   --kroki-server URL    Enable Kroki for additional diagram types
@@ -42,9 +42,8 @@ EOF
   exit 0
 }
 
-FORMAT_PDF=false
-FORMAT_HTML=false
-OUTPUT_BASE=""
+FORMAT=""
+OUTPUT_FILE=""
 MAXWIDTH="60em"
 CENTER_MATH=false
 KROKI_URL=""
@@ -53,13 +52,17 @@ INPUT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -t|--to)
+      if [ -n "$FORMAT" ]; then
+        echo "Error: -t/--to can only be specified once." >&2
+        exit 1
+      fi
       case "$2" in
-        pdf)  FORMAT_PDF=true ;;
-        html) FORMAT_HTML=true ;;
+        pdf)  FORMAT=pdf ;;
+        html) FORMAT=html ;;
         *)    echo "Error: Unknown format '$2'." >&2; exit 1 ;;
       esac
       shift 2 ;;
-    -o|--output)    OUTPUT_BASE="$2"; shift 2 ;;
+    -o|--output)    OUTPUT_FILE="$2"; shift 2 ;;
     --maxwidth)     MAXWIDTH="$2"; shift 2 ;;
     --center-math)  CENTER_MATH=true; shift ;;
     --kroki-server) KROKI_URL="$2"; shift 2 ;;
@@ -80,12 +83,8 @@ if [ ! -f "$INPUT" ]; then
   exit 1
 fi
 
-if [ "$FORMAT_PDF" = false ] && [ "$FORMAT_HTML" = false ]; then
-  FORMAT_HTML=true
-fi
-
-if [ -z "$OUTPUT_BASE" ]; then
-  OUTPUT_BASE="$(basename "$INPUT" .md)"
+if [ -z "$FORMAT" ]; then
+  FORMAT=html
 fi
 
 if [ -n "$KROKI_URL" ]; then
@@ -105,28 +104,44 @@ if [ -f "$MERMAID_SERVER_SCRIPT" ]; then
   fi
 fi
 
-MATH_PDF_FLAGS=""
-MATH_HTML_FLAGS=""
-if [ "$CENTER_MATH" = false ]; then
-  MATH_PDF_FLAGS="-V classoption=fleqn"
-  MATH_HTML_FLAGS="-V header-includes=<script>window.MathJax={chtml:{displayAlign:'left'}};</script>"
+MATH_FLAGS=""
+if [ "$FORMAT" = pdf ]; then
+  if [ "$CENTER_MATH" = false ]; then
+    MATH_FLAGS="-V classoption=fleqn"
+  fi
+else
+  if [ "$CENTER_MATH" = false ]; then
+    MATH_FLAGS="-V header-includes=<script>window.MathJax={chtml:{displayAlign:'left'}};</script>"
+  fi
 fi
 
-if [ "$FORMAT_PDF" = true ]; then
-  echo "Generating ${OUTPUT_BASE}.pdf ..."
-  pandoc $PANDOC_COMMON \
-    --to=pdf --pdf-engine=pdflatex \
-    -V geometry:margin=2.5cm $MATH_PDF_FLAGS \
-    --standalone \
-    -o "${OUTPUT_BASE}.pdf" "$INPUT"
-  echo "  -> ${OUTPUT_BASE}.pdf"
-fi
-
-if [ "$FORMAT_HTML" = true ]; then
-  echo "Generating ${OUTPUT_BASE}.html ..."
-  pandoc $PANDOC_COMMON \
-    --to=html5 --standalone --embed-resources --mathjax \
-    -V maxwidth="$MAXWIDTH" $MATH_HTML_FLAGS \
-    -o "${OUTPUT_BASE}.html" "$INPUT"
-  echo "  -> ${OUTPUT_BASE}.html"
+if [ -n "$OUTPUT_FILE" ]; then
+  echo "Generating ${OUTPUT_FILE} ..." >&2
+  if [ "$FORMAT" = pdf ]; then
+    pandoc $PANDOC_COMMON \
+      --to=pdf --pdf-engine=pdflatex \
+      -V geometry:margin=2.5cm $MATH_FLAGS \
+      --standalone \
+      -o "$OUTPUT_FILE" "$INPUT"
+  else
+    pandoc $PANDOC_COMMON \
+      --to=html5 --standalone --embed-resources --mathjax \
+      -V maxwidth="$MAXWIDTH" $MATH_FLAGS \
+      -o "$OUTPUT_FILE" "$INPUT"
+  fi
+  echo "  -> $OUTPUT_FILE" >&2
+else
+  echo "Generating ${FORMAT} ..." >&2
+  if [ "$FORMAT" = pdf ]; then
+    pandoc $PANDOC_COMMON \
+      --to=pdf --pdf-engine=pdflatex \
+      -V geometry:margin=2.5cm $MATH_FLAGS \
+      --standalone \
+      "$INPUT"
+  else
+    pandoc $PANDOC_COMMON \
+      --to=html5 --standalone --embed-resources --mathjax \
+      -V maxwidth="$MAXWIDTH" $MATH_FLAGS \
+      "$INPUT"
+  fi
 fi

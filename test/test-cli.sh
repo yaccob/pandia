@@ -74,85 +74,155 @@ test_cli_unknown_option() {
 }
 test_cli_unknown_option
 
-section "cli: local rendering"
-
-test_cli_html_output() {
-  local tmpdir out
+test_cli_duplicate_format() {
+  local tmpdir out rc
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  out=$("$PANDIA" -t html -o "$tmpdir/out" "$tmpdir/input.md" 2>&1)
-  assert_contains "$out" "Generating" "Shows generating message"
+  out=$("$PANDIA" -t html -t pdf "$tmpdir/input.md" 2>&1) && rc=0 || rc=$?
+  assert_exit_nonzero "$rc" "Duplicate -t causes error"
+  assert_contains "$out" "-t" "Error mentions -t flag"
+  rm -rf "$tmpdir"
+}
+test_cli_duplicate_format
+
+test_cli_watch_requires_output() {
+  local tmpdir out rc
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  out=$("$PANDIA" --watch "$tmpdir/input.md" 2>&1) && rc=0 || rc=$?
+  assert_exit_nonzero "$rc" "--watch without -o exits with error"
+  assert_contains "$out" "-o" "Error message mentions -o"
+  rm -rf "$tmpdir"
+}
+test_cli_watch_requires_output
+
+section "cli: stdout/stderr convention"
+
+test_cli_status_on_stderr() {
+  local tmpdir stdout stderr_file stderr
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  stderr_file="$tmpdir/stderr"
+  stdout=$("$PANDIA" -t html -o "$tmpdir/out.html" "$tmpdir/input.md" 2>"$stderr_file") || true
+  stderr=$(cat "$stderr_file")
+  assert_contains "$stderr" "Generating" "Status message appears on stderr"
+  assert_not_contains "$stdout" "Generating" "Status message not on stdout"
+  rm -rf "$tmpdir"
+}
+test_cli_status_on_stderr
+
+test_cli_stdout_html_without_output_flag() {
+  local tmpdir stdout stderr_file
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  stderr_file="$tmpdir/stderr"
+  stdout=$("$PANDIA" -t html "$tmpdir/input.md" 2>"$stderr_file") || true
+  assert_contains "$stdout" "<h1" "HTML content appears on stdout without -o"
+  rm -rf "$tmpdir"
+}
+test_cli_stdout_html_without_output_flag
+
+test_cli_stdout_no_file_created() {
+  local tmpdir stdout stderr_file
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  stderr_file="$tmpdir/stderr"
+  stdout=$(cd "$tmpdir" && "$PANDIA" input.md 2>"$stderr_file") || true
+  [[ ! -f "$tmpdir/input.html" ]] \
+    && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "No file created without -o"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "No file created without -o"; ERRORS="${ERRORS}\n  FAIL: Unexpected file created without -o"; }
+  rm -rf "$tmpdir"
+}
+test_cli_stdout_no_file_created
+
+test_cli_file_mode_stdout_empty() {
+  local tmpdir stdout stderr_file
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  stderr_file="$tmpdir/stderr"
+  stdout=$("$PANDIA" -t html -o "$tmpdir/out.html" "$tmpdir/input.md" 2>"$stderr_file") || true
+  assert_file_exists "$tmpdir/out.html" "File created with -o"
+  [[ -z "$stdout" ]] \
+    && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "stdout empty with -o (content in file)"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "stdout empty with -o (content in file)"; ERRORS="${ERRORS}\n  FAIL: stdout not empty with -o"; }
+  rm -rf "$tmpdir"
+}
+test_cli_file_mode_stdout_empty
+
+test_cli_stdout_pdf_without_output_flag() {
+  local tmpdir stderr_file stdout_file
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  stderr_file="$tmpdir/stderr"
+  stdout_file="$tmpdir/stdout"
+  "$PANDIA" -t pdf "$tmpdir/input.md" >"$stdout_file" 2>"$stderr_file" || true
+  # PDF starts with %PDF magic bytes
+  local header
+  header=$(head -c 5 "$stdout_file")
+  assert_contains "$header" "%PDF" "PDF content appears on stdout without -o"
+  rm -rf "$tmpdir"
+}
+test_cli_stdout_pdf_without_output_flag
+
+section "cli: local rendering (file mode)"
+
+test_cli_html_file_output() {
+  local tmpdir stderr_file stderr
+  tmpdir=$(mktemp -d)
+  echo '# Hello' > "$tmpdir/input.md"
+  stderr_file="$tmpdir/stderr"
+  "$PANDIA" -t html -o "$tmpdir/out.html" "$tmpdir/input.md" 2>"$stderr_file" >/dev/null
+  stderr=$(cat "$stderr_file")
+  assert_contains "$stderr" "Generating" "Shows generating message on stderr"
   assert_file_exists "$tmpdir/out.html" "HTML file created"
   rm -rf "$tmpdir"
 }
-test_cli_html_output
+test_cli_html_file_output
 
-test_cli_pdf_output() {
-  local tmpdir out
+test_cli_pdf_file_output() {
+  local tmpdir stderr_file stderr
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  out=$("$PANDIA" -t pdf -o "$tmpdir/out" "$tmpdir/input.md" 2>&1)
-  assert_contains "$out" "Generating" "Shows generating message"
+  stderr_file="$tmpdir/stderr"
+  "$PANDIA" -t pdf -o "$tmpdir/out.pdf" "$tmpdir/input.md" 2>"$stderr_file" >/dev/null
+  stderr=$(cat "$stderr_file")
+  assert_contains "$stderr" "Generating" "Shows generating message on stderr"
   assert_file_exists "$tmpdir/out.pdf" "PDF file created"
   rm -rf "$tmpdir"
 }
-test_cli_pdf_output
-
-test_cli_both_formats() {
-  local tmpdir out
-  tmpdir=$(mktemp -d)
-  echo '# Hello' > "$tmpdir/input.md"
-  out=$("$PANDIA" -t pdf -t html -o "$tmpdir/out" "$tmpdir/input.md" 2>&1)
-  assert_file_exists "$tmpdir/out.html" "HTML file created with -t pdf -t html"
-  assert_file_exists "$tmpdir/out.pdf" "PDF file created with -t pdf -t html"
-  rm -rf "$tmpdir"
-}
-test_cli_both_formats
+test_cli_pdf_file_output
 
 test_cli_default_format_is_html() {
-  local tmpdir out
+  local tmpdir stdout stderr_file
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  out=$("$PANDIA" -o "$tmpdir/out" "$tmpdir/input.md" 2>&1)
-  assert_file_exists "$tmpdir/out.html" "Default format is HTML"
-  [[ ! -f "$tmpdir/out.pdf" ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "No PDF created when no -t pdf"; } \
-    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "No PDF created when no -t pdf"; ERRORS="${ERRORS}\n  FAIL: Unexpected PDF created"; }
+  stderr_file="$tmpdir/stderr"
+  stdout=$("$PANDIA" "$tmpdir/input.md" 2>"$stderr_file") || true
+  assert_contains "$stdout" "<h1" "Default format is HTML (content on stdout)"
   rm -rf "$tmpdir"
 }
 test_cli_default_format_is_html
 
-test_cli_output_name_derived() {
-  local tmpdir out
-  tmpdir=$(mktemp -d)
-  echo '# Hello' > "$tmpdir/myfile.md"
-  out=$(cd "$tmpdir" && "$PANDIA" myfile.md 2>&1)
-  assert_file_exists "$tmpdir/myfile.html" "Output name derived from input filename"
-  rm -rf "$tmpdir"
-}
-test_cli_output_name_derived
-
 section "cli: --maxwidth option"
 
 test_cli_maxwidth() {
-  local tmpdir
+  local tmpdir stdout stderr_file
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  "$PANDIA" -t html -o "$tmpdir/out" --maxwidth 40em "$tmpdir/input.md" >/dev/null 2>&1
-  local content
-  content=$(cat "$tmpdir/out.html")
-  assert_contains "$content" "40em" "Custom maxwidth appears in HTML output"
+  stderr_file="$tmpdir/stderr"
+  stdout=$("$PANDIA" -t html --maxwidth 40em "$tmpdir/input.md" 2>"$stderr_file") || true
+  assert_contains "$stdout" "40em" "Custom maxwidth appears in HTML output"
   rm -rf "$tmpdir"
 }
 test_cli_maxwidth
 
 test_cli_maxwidth_default() {
-  local tmpdir
+  local tmpdir stdout stderr_file
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
-  "$PANDIA" -t html -o "$tmpdir/out" "$tmpdir/input.md" >/dev/null 2>&1
-  local content
-  content=$(cat "$tmpdir/out.html")
-  assert_contains "$content" "60em" "Default maxwidth 60em in HTML output"
+  stderr_file="$tmpdir/stderr"
+  stdout=$("$PANDIA" -t html "$tmpdir/input.md" 2>"$stderr_file") || true
+  assert_contains "$stdout" "60em" "Default maxwidth 60em in HTML output"
   rm -rf "$tmpdir"
 }
 test_cli_maxwidth_default
@@ -160,25 +230,23 @@ test_cli_maxwidth_default
 section "cli: --center-math option"
 
 test_cli_center_math_html() {
-  local tmpdir
+  local tmpdir stdout stderr_file
   tmpdir=$(mktemp -d)
   printf '# Math\n\n$$x^2$$\n' > "$tmpdir/input.md"
-  "$PANDIA" -t html -o "$tmpdir/out" --center-math "$tmpdir/input.md" >/dev/null 2>&1
-  local content
-  content=$(cat "$tmpdir/out.html")
-  assert_not_contains "$content" "displayAlign" "--center-math omits left-align MathJax config"
+  stderr_file="$tmpdir/stderr"
+  stdout=$("$PANDIA" -t html --center-math "$tmpdir/input.md" 2>"$stderr_file") || true
+  assert_not_contains "$stdout" "displayAlign" "--center-math omits left-align MathJax config"
   rm -rf "$tmpdir"
 }
 test_cli_center_math_html
 
 test_cli_default_left_align_math() {
-  local tmpdir
+  local tmpdir stdout stderr_file
   tmpdir=$(mktemp -d)
   printf '# Math\n\n$$x^2$$\n' > "$tmpdir/input.md"
-  "$PANDIA" -t html -o "$tmpdir/out" "$tmpdir/input.md" >/dev/null 2>&1
-  local content
-  content=$(cat "$tmpdir/out.html")
-  assert_contains "$content" "displayAlign" "Default math is left-aligned (MathJax displayAlign)"
+  stderr_file="$tmpdir/stderr"
+  stdout=$("$PANDIA" -t html "$tmpdir/input.md" 2>"$stderr_file") || true
+  assert_contains "$stdout" "displayAlign" "Default math is left-aligned (MathJax displayAlign)"
   rm -rf "$tmpdir"
 }
 test_cli_default_left_align_math
@@ -197,7 +265,7 @@ if $KROKI_AVAILABLE; then
     printf '# Kroki\n\n```pikchr\nbox "A"; arrow; box "B"\n```\n' > "$tmpdir/input.md"
     cp "$FILTER" "$tmpdir/"
     local out
-    out=$(cd "$tmpdir" && "$PANDIA" -t html -o "$tmpdir/out" --kroki-server https://kroki.io input.md 2>&1) || true
+    out=$(cd "$tmpdir" && "$PANDIA" -t html -o "$tmpdir/out.html" --kroki-server https://kroki.io input.md 2>&1) || true
     assert_file_exists "$tmpdir/out.html" "--kroki-server produces HTML output"
     local content
     content=$(cat "$tmpdir/out.html" 2>/dev/null) || true
@@ -234,7 +302,7 @@ if [[ -n "$CONTAINER_RT" ]]; then
 
     # Render via --server
     local out
-    out=$("$PANDIA" --server "http://localhost:${port}" -t html -o "$tmpdir/out" "$tmpdir/input.md" 2>&1) || true
+    out=$("$PANDIA" --server "http://localhost:${port}" -t html -o "$tmpdir/out.html" "$tmpdir/input.md" 2>&1) || true
     assert_file_exists "$tmpdir/out.html" "--server produces HTML output"
 
     # Cleanup
@@ -268,7 +336,7 @@ test_local_serve_renders() {
 
   # Render via --server
   local out
-  out=$("$PANDIA" --server "http://localhost:${port}" -t html -o "$tmpdir/out" "$tmpdir/input.md" 2>&1) || true
+  out=$("$PANDIA" --server "http://localhost:${port}" -t html -o "$tmpdir/out.html" "$tmpdir/input.md" 2>&1) || true
 
   # Must not fail with "cannot open filter" or similar
   assert_not_contains "$out" "No such file" \
