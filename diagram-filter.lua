@@ -90,6 +90,19 @@ local function ensure_imgdir()
   os.execute("mkdir -p " .. imgdir)
 end
 
+-- Detect best available tool for TikZ PDF→SVG conversion (once at startup)
+-- Priority: dvisvgm (TeX Live, works everywhere), pdftocairo (poppler-utils,
+-- container), pdf2svg (standalone). dvisvgm before pdftocairo because
+-- pdftocairo can crash on macOS due to broken poppler library dependencies.
+local tikz_svg_tool = nil
+if os.execute("which dvisvgm >/dev/null 2>&1") then
+  tikz_svg_tool = "dvisvgm"
+elseif os.execute("which pdftocairo >/dev/null 2>&1") then
+  tikz_svg_tool = "pdftocairo"
+elseif os.execute("which pdf2svg >/dev/null 2>&1") then
+  tikz_svg_tool = "pdf2svg"
+end
+
 local function detect_format()
   is_html = FORMAT:match("html") ~= nil
   is_pdf = not is_html
@@ -235,7 +248,47 @@ local function prepare_tikz(code)
   local cleanup = {texfile, basename .. ".aux", basename .. ".log"}
 
   if is_html then
+    -- Prefer SVG (vector) via dvisvgm or pdf2svg; fall back to PNG via gs
+    local svgfile = basename .. ".svg"
     local pngfile = basename .. ".png"
+    local pdf2svg_cmd
+    if tikz_svg_tool == "pdftocairo" then
+      pdf2svg_cmd = compile .. " || { rm -f " .. pdffile .. "; false; }"
+        .. " && pdftocairo -svg " .. pdffile .. " " .. svgfile
+    elseif tikz_svg_tool == "dvisvgm" then
+      -- dvisvgm needs libgs for TikZ PostScript specials; use latex→DVI path
+      local dvifile = basename .. ".dvi"
+      local compile_dvi = "latex -interaction=nonstopmode -output-directory=" .. imgdir
+        .. " " .. texfile .. " >/dev/null 2>&1"
+      table.insert(cleanup, dvifile)
+      local libgs_flag = ""
+      local libgs = os.getenv("LIBGS")
+      if not libgs then
+        local candidates = {
+          "/opt/homebrew/lib/libgs.dylib", "/opt/homebrew/lib/libgs.10.dylib",
+          "/usr/lib/libgs.so", "/usr/lib/libgs.so.10",
+          "/usr/local/lib/libgs.dylib", "/usr/local/lib/libgs.so",
+        }
+        for _, p in ipairs(candidates) do
+          if file_readable(p) then libgs = p; break end
+        end
+      end
+      if libgs then libgs_flag = " --libgs=" .. libgs end
+      pdf2svg_cmd = compile_dvi .. " || { rm -f " .. dvifile .. "; false; }"
+        .. " && dvisvgm" .. libgs_flag .. " --no-fonts --exact-bbox -o " .. svgfile .. " " .. dvifile
+    elseif tikz_svg_tool == "pdf2svg" then
+      pdf2svg_cmd = compile .. " || { rm -f " .. pdffile .. "; false; }"
+        .. " && pdf2svg " .. pdffile .. " " .. svgfile
+    end
+    if pdf2svg_cmd then
+      return {
+        tool = "tikz",
+        outfile = svgfile,
+        cmd = pdf2svg_cmd,
+        cleanup = cleanup,
+      }
+    end
+    -- Fallback: PNG via Ghostscript (raster, but works everywhere)
     return {
       tool = "tikz",
       outfile = pngfile,

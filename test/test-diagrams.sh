@@ -736,14 +736,18 @@ test_markmap_auto_fit() {
 }
 test_markmap_auto_fit
 
-# --- TikZ background ---
+# --- TikZ SVG output ---
 
-section "tikz: white background in HTML output"
+section "tikz: vector output in HTML"
 
-test_tikz_html_has_white_background() {
-  # Only run if pdflatex is available
+test_tikz_html_is_svg() {
+  # Only run if pdflatex and dvisvgm are available
   if ! command -v pdflatex >/dev/null 2>&1; then
-    printf "  ${GREEN}SKIP${RESET} tikz background test: pdflatex not installed\n"
+    printf "  ${GREEN}SKIP${RESET} tikz SVG test: pdflatex not installed\n"
+    return
+  fi
+  if ! command -v dvisvgm >/dev/null 2>&1; then
+    printf "  ${GREEN}SKIP${RESET} tikz SVG test: dvisvgm not installed\n"
     return
   fi
   local input='```tikz
@@ -756,30 +760,125 @@ test_tikz_html_has_white_background() {
   echo "$input" | pandoc --lua-filter="$FILTER" --from=gfm -t html5 2>/dev/null > "$tmpdir/out" || true
   local out
   out=$(cat "$tmpdir/out")
+  rm -rf "$tmpdir"
 
-  # Find the generated PNG and check if it has a white background
-  local imgfile
-  imgfile=$(echo "$out" | grep -o 'img/tikz-[^"]*\.png' | head -1)
-  if [[ -n "$imgfile" && -f "$imgfile" ]]; then
-    # Use identify to check if image has alpha channel (transparent)
-    if command -v identify >/dev/null 2>&1; then
-      local has_alpha
-      has_alpha=$(identify -verbose "$imgfile" 2>/dev/null | grep -c "Alpha" || true)
-      if [[ "$has_alpha" -eq 0 ]]; then
-        PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "TikZ PNG has no alpha channel (opaque background)"
-      else
-        FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "TikZ PNG has alpha channel (transparent background)"
-        ERRORS="${ERRORS}\n  FAIL: TikZ PNG has transparent background"
-      fi
-    else
-      printf "  ${GREEN}SKIP${RESET} TikZ background check: identify not installed\n"
-    fi
-  else
-    printf "  ${GREEN}SKIP${RESET} TikZ background check: no image generated\n"
+  # TikZ must produce SVG (vector), not PNG (raster) in HTML output
+  assert_contains "$out" ".svg" \
+    "TikZ HTML output uses SVG (vector graphics)"
+  assert_not_contains "$out" ".png" \
+    "TikZ HTML output must not use PNG (raster)"
+}
+test_tikz_html_is_svg
+
+# --- Integration test: example.md ---
+
+section "integration: example.md renders all diagram types"
+
+test_example_md_all_diagrams() {
+  if [[ ! -f "$PROJECT_DIR/example.md" ]]; then
+    printf "  ${GREEN}SKIP${RESET} example.md not found\n"
+    return
   fi
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  cp "$PROJECT_DIR/example.md" "$tmpdir/"
+  local out err
+  out=$(cd "$tmpdir" && pandoc --lua-filter="$FILTER" --from=gfm+tex_math_dollars --to=html5 --standalone example.md 2>"$tmpdir/err") || true
+  err=$(cat "$tmpdir/err")
+  echo "$out" > "$tmpdir/example.html"
+
+  # Every diagram type that is locally available must render (img, svg, or markmap-container)
+  # PlantUML: Sequence, Class, EBNF
+  for name in "Sequence Diagram" "Class Diagram" "EBNF Syntax"; do
+    local has_img
+    has_img=$(echo "$out" | sed -n "/$name/,/^<h[0-9]/p" | grep -c '<svg\|<img' || true)
+    if [[ "$has_img" -gt 0 ]]; then
+      PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "example.md: $name rendered"
+    else
+      FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "example.md: $name NOT rendered"
+      ERRORS="${ERRORS}\n  FAIL: example.md $name not rendered"
+    fi
+  done
+
+  # Graphviz
+  for name in "Directed Graph" "State Machine"; do
+    local has_img
+    has_img=$(echo "$out" | sed -n "/$name/,/^<h[0-9]/p" | grep -c '<svg\|<img' || true)
+    if [[ "$has_img" -gt 0 ]]; then
+      PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "example.md: $name rendered"
+    else
+      FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "example.md: $name NOT rendered"
+      ERRORS="${ERRORS}\n  FAIL: example.md $name not rendered"
+    fi
+  done
+
+  # Mermaid
+  for name in "Flowchart" "Gantt Chart"; do
+    local has_img
+    has_img=$(echo "$out" | sed -n "/$name/,/^<h[0-9]/p" | grep -c '<svg\|<img' || true)
+    if [[ "$has_img" -gt 0 ]]; then
+      PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "example.md: $name rendered"
+    else
+      FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "example.md: $name NOT rendered"
+      ERRORS="${ERRORS}\n  FAIL: example.md $name not rendered"
+    fi
+  done
+
+  # Markmap (uses markmap-container div, not img/svg)
+  local has_markmap
+  has_markmap=$(echo "$out" | grep -c 'markmap-container' || true)
+  if [[ "$has_markmap" -gt 0 ]]; then
+    PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "example.md: Markmap rendered"
+  else
+    FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "example.md: Markmap NOT rendered"
+    ERRORS="${ERRORS}\n  FAIL: example.md Markmap not rendered"
+  fi
+
+  # Ditaa
+  local has_ditaa
+  has_ditaa=$(echo "$out" | sed -n "/Ditaa/,/^<h[0-9]/p" | grep -c '<img' || true)
+  if [[ "$has_ditaa" -gt 0 ]]; then
+    PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "example.md: Ditaa rendered"
+  else
+    FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "example.md: Ditaa NOT rendered"
+    ERRORS="${ERRORS}\n  FAIL: example.md Ditaa not rendered"
+  fi
+
+  # TikZ
+  local has_tikz
+  has_tikz=$(echo "$out" | sed -n "/TikZ/,/^<h[0-9]/p" | grep -c '<svg\|<img' || true)
+  if [[ "$has_tikz" -gt 0 ]]; then
+    PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "example.md: TikZ rendered"
+  else
+    FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "example.md: TikZ NOT rendered"
+    ERRORS="${ERRORS}\n  FAIL: example.md TikZ not rendered"
+  fi
+
+  # Node-renderer types (nomnoml, DBML, WaveDrom — D2 may not be installed locally)
+  for name in "Nomnoml" "DBML" "WaveDrom"; do
+    local has_img
+    has_img=$(echo "$out" | sed -n "/$name/,/^<h[0-9]/p" | grep -c '<svg\|<img' || true)
+    if [[ "$has_img" -gt 0 ]]; then
+      PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "example.md: $name rendered"
+    else
+      FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "example.md: $name NOT rendered"
+      ERRORS="${ERRORS}\n  FAIL: example.md $name not rendered"
+    fi
+  done
+
+  # No rendering errors (ignore d2 if not installed)
+  local real_errors
+  real_errors=$(echo "$err" | grep 'pandia.*error' | grep -v 'd2' || true)
+  if [[ -z "$real_errors" ]]; then
+    PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "example.md: no rendering errors"
+  else
+    FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "example.md: rendering errors found"
+    ERRORS="${ERRORS}\n  FAIL: $real_errors"
+  fi
+
   rm -rf "$tmpdir"
 }
-test_tikz_html_has_white_background
+test_example_md_all_diagrams
 
 print_summary
 exit $FAIL

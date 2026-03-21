@@ -15,6 +15,7 @@ RUN apk add --no-cache \
     graphviz \
     librsvg \
     rsvg-convert \
+    poppler-utils \
     openjdk17-jre \
     chromium \
     nss \
