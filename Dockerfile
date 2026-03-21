@@ -35,13 +35,24 @@ RUN mkdir -p /opt/plantuml && \
     printf '#!/bin/sh\nexec java -jar /opt/plantuml/plantuml.jar "$@"\n' > /usr/local/bin/plantuml && \
     chmod +x /usr/local/bin/plantuml
 
-# Mermaid CLI (with Chromium config for container use) and Markmap CLI
-RUN npm install -g @mermaid-js/mermaid-cli markmap-cli && \
+# Mermaid CLI, Markmap CLI, and diagram renderer dependencies
+RUN npm install -g @mermaid-js/mermaid-cli markmap-cli \
+    nomnoml @softwaretechnik/dbml-renderer wavedrom && \
     printf '{\n  "executablePath": "/usr/bin/chromium-browser",\n  "args": ["--no-sandbox", "--disable-gpu"]\n}\n' \
       > /etc/mermaid-puppeteer-config.json
 
 ENV PUPPETEER_CONFIG=/etc/mermaid-puppeteer-config.json
 ENV MMDC_PUPPETEER_CONFIG=/etc/mermaid-puppeteer-config.json
+ENV NODE_PATH=/usr/local/lib/node_modules
+
+# D2 diagram tool (Go binary)
+RUN ARCH=$(uname -m | sed 's/aarch64/arm64/;s/x86_64/amd64/') && \
+    wget -q -O /tmp/d2.tar.gz \
+      "https://github.com/terrastruct/d2/releases/download/v0.7.1/d2-v0.7.1-linux-${ARCH}.tar.gz" && \
+    tar -xzf /tmp/d2.tar.gz -C /tmp && \
+    cp /tmp/d2-v0.7.1/bin/d2 /usr/local/bin/d2 && \
+    chmod +x /usr/local/bin/d2 && \
+    rm -rf /tmp/d2*
 
 # Install the Lua filter
 COPY diagram-filter.lua /usr/local/share/pandoc/filters/diagram-filter.lua
@@ -49,8 +60,9 @@ COPY diagram-filter.lua /usr/local/share/pandoc/filters/diagram-filter.lua
 # Mermaid render server (placed inside mermaid-cli for correct import resolution)
 COPY mermaid-server.mjs /usr/local/lib/node_modules/@mermaid-js/mermaid-cli/mermaid-server.mjs
 
-# Markmap renderer
+# Markmap renderer and generic diagram renderer
 COPY markmap-render.mjs /usr/local/share/pandia/markmap-render.mjs
+COPY diagram-renderer.mjs /usr/local/lib/node_modules/diagram-renderer.mjs
 
 # Pandia HTTP server
 COPY pandia-server.mjs /usr/local/share/pandia/pandia-server.mjs

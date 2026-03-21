@@ -33,6 +33,49 @@ local local_tools = {
   markmap = true,
 }
 
+-- Types rendered via diagram-renderer.mjs (Node.js npm packages)
+local node_renderer_types = {
+  nomnoml = true, dbml = true, d2 = true, wavedrom = true,
+}
+
+-- Check if a node_renderer_type can actually run locally
+local node_renderer_avail_cache = {}
+local function node_renderer_available(dtype)
+  if node_renderer_avail_cache[dtype] ~= nil then
+    return node_renderer_avail_cache[dtype]
+  end
+  local avail = false
+  if dtype == "d2" then
+    -- D2 uses a CLI binary, not diagram-renderer.mjs
+    avail = os.execute("d2 --version >/dev/null 2>&1") == true
+  else
+    -- Other types need diagram-renderer.mjs
+    avail = diagram_renderer ~= nil
+  end
+  node_renderer_avail_cache[dtype] = avail
+  return avail
+end
+
+-- Path to diagram-renderer.mjs (resolve: env var, container path, relative to filter)
+local diagram_renderer = os.getenv("PANDIA_DIAGRAM_RENDERER")
+local function file_readable(path)
+  local f = io.open(path, "r")
+  if f then f:close(); return true end
+  return false
+end
+if not diagram_renderer then
+  local candidates = {
+    "/usr/local/lib/node_modules/diagram-renderer.mjs",
+    "/usr/local/share/pandia/diagram-renderer.mjs",
+  }
+  -- Also try relative to this filter's directory
+  local script_dir = debug.getinfo(1, "S").source:match("@?(.*/)") or ""
+  table.insert(candidates, script_dir .. "diagram-renderer.mjs")
+  for _, path in ipairs(candidates) do
+    if file_readable(path) then diagram_renderer = path; break end
+  end
+end
+
 -- All Kroki-supported diagram types
 local kroki_types = {
   actdiag = true, blockdiag = true, bpmn = true, bytefield = true,
@@ -542,6 +585,46 @@ local function prepare_kroki(code, diagram_type)
 end
 
 ------------------------------------------------------------------------
+-- Node.js diagram-renderer.mjs (nomnoml, dbml, d2, wavedrom)
+------------------------------------------------------------------------
+
+local function prepare_node_renderer(code, diagram_type)
+  ensure_imgdir()
+  filecounter = filecounter + 1
+
+  local basename = imgdir .. "/" .. diagram_type .. "-" .. filecounter
+  local infile = basename .. ".txt"
+  local svgfile = basename .. ".svg"
+
+  local f = io.open(infile, "w")
+  f:write(code)
+  f:close()
+
+  local cmd = "node " .. diagram_renderer
+    .. " --type " .. diagram_type
+    .. " --input " .. infile
+    .. " --output " .. svgfile
+
+  if is_html then
+    return {
+      tool = diagram_type,
+      outfile = svgfile,
+      cmd = cmd,
+      cleanup = {infile},
+    }
+  else
+    local outfile = basename .. ".pdf"
+    return {
+      tool = diagram_type,
+      outfile = outfile,
+      cmd = cmd
+        .. " && rsvg-convert -f pdf -o " .. outfile .. " " .. svgfile,
+      cleanup = {infile, svgfile},
+    }
+  end
+end
+
+------------------------------------------------------------------------
 -- Pass 1: collect all diagram blocks, write input files
 ------------------------------------------------------------------------
 
@@ -589,8 +672,11 @@ local function pass1_CodeBlock(block)
     job = prepare_ditaa(block.text)
   elseif lang == "tikz" then
     job = prepare_tikz(block.text)
+  elseif node_renderer_types[lang] and node_renderer_available(lang) then
+    -- Rendered via diagram-renderer.mjs (npm packages / CLI tools)
+    job = prepare_node_renderer(block.text, lang)
   elseif kroki_server and kroki_types[lang] then
-    -- Unknown locally but supported by Kroki
+    -- Not available locally but supported by Kroki
     job = prepare_kroki(block.text, lang)
   end
 

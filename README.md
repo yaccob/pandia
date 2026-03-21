@@ -24,21 +24,32 @@ Most diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zo
 | PlantUML   | `` ```plantuml ``   | Vector (PDF/SVG)          |
 | Graphviz   | `` ```graphviz ``   | Vector (PDF/SVG)          |
 | Mermaid    | `` ```mermaid ``    | Vector (PDF/SVG)          |
+| Markmap    | `` ```markmap ``    | Interactive HTML / Vector PDF |
 | Ditaa      | `` ```ditaa ``      | Raster (PNG)              |
 | TikZ       | `` ```tikz ``       | Vector (PDF), PNG in HTML |
 
-**Kroki-powered** (requires `--kroki` flag)
+**Container-native** (available in Docker/Podman, with Kroki fallback locally)
+
+| Feature    | Code Block Syntax   | Output Format             |
+|------------|---------------------|---------------------------|
+| Nomnoml    | `` ```nomnoml ``    | Vector (PDF/SVG)          |
+| DBML       | `` ```dbml ``       | Vector (PDF/SVG)          |
+| D2         | `` ```d2 ``         | Vector (PDF/SVG)          |
+| WaveDrom   | `` ```wavedrom ``   | Vector (PDF/SVG)          |
+
+**Kroki-powered** (requires `--kroki` flag or `--kroki-server URL`)
 
 | Feature    | Code Block Syntax   | Output Format             |
 |------------|---------------------|---------------------------|
 | BPMN       | `` ```bpmn ``       | Vector (PDF/SVG)          |
-| D2         | `` ```d2 ``         | Vector (PDF/SVG)          |
-| DBML       | `` ```dbml ``       | Vector (PDF/SVG)          |
 | ERD        | `` ```erd ``        | Vector (PDF/SVG)          |
 | Svgbob     | `` ```svgbob ``     | Vector (PDF/SVG)          |
-| WaveDrom   | `` ```wavedrom ``   | Vector (PDF/SVG)          |
-| Nomnoml    | `` ```nomnoml ``    | Vector (PDF/SVG)          |
 | Pikchr     | `` ```pikchr ``     | Vector (PDF/SVG)          |
+| + many more | See [Kroki docs](https://kroki.io/#support) | Vector (PDF/SVG) |
+
+> **Note:** Container-native types (Nomnoml, DBML, D2, WaveDrom) are always available
+> in the Docker/Podman image. When running locally without these tools installed,
+> they fall back to Kroki automatically if `--kroki` or `--kroki-server` is configured.
 
 ## Installation
 
@@ -48,14 +59,14 @@ Most diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zo
 brew install yaccob/tap/pandia
 ```
 
-This installs `pandia` and all required tools (Pandoc, PlantUML, Graphviz, Mermaid CLI, librsvg).
+This installs `pandia` and all required tools (Pandoc, PlantUML, Graphviz, Mermaid CLI, Markmap CLI, librsvg).
 
 > **Note:** PDF output requires a LaTeX distribution. Install with `brew install --cask basictex`.
 
 ### Manual Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yaccob/pandia/v1.4.0/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/yaccob/pandia/master/install.sh | sh
 ```
 
 Installs the `pandia` script to `~/.local/bin`. You still need either:
@@ -68,6 +79,17 @@ Installs the `pandia` script to `~/.local/bin`. You still need either:
 docker pull yaccob/pandia
 docker run --rm -v "$PWD:/data" yaccob/pandia -t pdf -t html myfile.md
 ```
+
+### VS Code Extension
+
+A preview extension is available in `pandia-vscode/`. It renders Markdown with all
+diagram types in a live preview panel, including interactive Markmap mind maps.
+
+```bash
+make vscode-install
+```
+
+See [pandia-vscode/README.md](pandia-vscode/README.md) for details.
 
 ## Usage
 
@@ -87,6 +109,29 @@ Options:
   --local               Force local mode (fail if tools missing)
   -v, --version         Show version
   -h, --help            Show this help
+```
+
+### HTTP API
+
+When running with `--serve`, pandia exposes an HTTP API:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check — returns `ok` |
+| `/render` | POST | Render a file on disk to PDF/HTML |
+| `/preview` | POST | Render Markdown content to self-contained HTML |
+
+**`/preview`** accepts raw Markdown as the request body and returns fully
+self-contained HTML with all images inlined as SVG and math rendered as MathML.
+Options are passed as query parameters (e.g. `?maxwidth=40em`).
+
+```bash
+curl -X POST http://localhost:3300/preview \
+  -H "Content-Type: text/plain" \
+  -d '# Hello
+```graphviz
+digraph { A -> B; }
+```'
 ```
 
 ### Examples
@@ -111,10 +156,6 @@ pandia -t pdf -o report myfile.md
 pandia --center-math -t pdf myfile.md
 
 # Enable Kroki diagram types (BPMN, D2, ERD, ...)
-export PANDIA_KROKI_URL=https://kroki.io
-pandia --kroki -t pdf -t html myfile.md
-
-# Or specify the Kroki server directly
 pandia --kroki-server https://kroki.io -t html myfile.md
 
 # Force Docker even if local tools are available
@@ -134,10 +175,8 @@ title: "Demo"
 ## Sequence Diagram
 
 ```plantuml
-@startuml
 Alice -> Bob : Hello
 Bob --> Alice : Hi
-@enduml
 ```
 
 ## Flowchart
@@ -153,6 +192,31 @@ flowchart LR
 
 ```graphviz
 digraph { rankdir=LR; A -> B -> C; }
+```
+
+## Mind Map
+
+```markmap
+# Project
+## Design
+### UX Research
+### Wireframes
+## Development
+### Backend
+### Frontend
+```
+
+## Database Schema
+
+```dbml
+Table users {
+  id integer [primary key]
+  name varchar
+}
+Table posts {
+  id integer [primary key]
+  user_id integer [ref: > users.id]
+}
 ```
 
 ## Formula
@@ -181,6 +245,22 @@ indented text — no special characters needed:
 - Entries with children are automatically detected as directories
 - The root entry (first line, no indentation) is always bold
 
+## How It Works
+
+pandia wraps [Pandoc](https://pandoc.org/) with a custom Lua filter that intercepts
+diagram code blocks, renders them via their respective tools, and passes the results
+back to Pandoc for PDF or HTML output.
+
+Supported tools are called directly as subprocesses — PlantUML, Graphviz, Mermaid CLI,
+Markmap, TikZ (via pdflatex), and a Node.js-based renderer for Nomnoml, DBML, D2, and
+WaveDrom. All diagram groups run concurrently for fast rendering.
+
+- **Local mode:** Calls tools directly — fast, no overhead
+- **Docker mode:** Runs everything in a self-contained container — no setup required
+- **Server mode:** HTTP API for integration with editors and CI pipelines
+
+The CLI automatically detects which mode to use: local tools if available, Docker as fallback.
+
 ## Why "pandia"?
 
 The name is a blend of **Pan**doc and **dia**grams — the two things this tool
@@ -189,17 +269,6 @@ which isn't a bad motto for a converter that pushes everything through one pipel
 And if you want to get mythological: Pandia was a Greek goddess of the full moon,
 daughter of Zeus and Selene — illuminating things that would otherwise stay in the dark.
 Much like your diagrams before you ran `pandia`.
-
-## How It Works
-
-pandia wraps [Pandoc](https://pandoc.org/) with a custom Lua filter that intercepts
-`plantuml`, `graphviz`, `mermaid`, `ditaa`, `tikz`, and `dir` code blocks, renders them via their
-respective CLI tools (or `pdflatex` for TikZ), and passes the results back to Pandoc for PDF or HTML output.
-
-- **Local mode:** Calls tools directly — fast, no overhead
-- **Docker mode:** Runs everything in a self-contained container — no setup required
-
-The CLI automatically detects which mode to use: local tools if available, Docker as fallback.
 
 ## License
 

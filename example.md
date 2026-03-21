@@ -313,6 +313,71 @@ In PDF output, a static snapshot is used.
   \end{tikzpicture}
 ```
 
+## Nomnoml – UML Diagrams
+
+```nomnoml
+[<frame>Authentication Flow |
+  [User] -> [Login Form]
+  [Login Form] -> [Auth Service]
+  [Auth Service] -> [<database> User DB]
+  [Auth Service] -> [Token Service]
+  [Token Service] --> [User]
+]
+```
+
+## DBML – Database Schema
+
+```dbml
+Table users {
+  id integer [primary key, increment]
+  username varchar [unique, not null]
+  email varchar [unique, not null]
+  created_at timestamp [default: `now()`]
+}
+
+Table posts {
+  id integer [primary key, increment]
+  title varchar [not null]
+  body text
+  status varchar [default: 'draft']
+  user_id integer [ref: > users.id]
+  created_at timestamp [default: `now()`]
+}
+
+Table comments {
+  id integer [primary key, increment]
+  body text [not null]
+  post_id integer [ref: > posts.id]
+  user_id integer [ref: > users.id]
+}
+```
+
+## D2 – Declarative Diagrams
+
+```d2
+Server: {
+  API Gateway -> Auth Service
+  API Gateway -> User Service
+  API Gateway -> Order Service
+  Auth Service -> Redis
+  User Service -> PostgreSQL
+  Order Service -> PostgreSQL
+  Order Service -> Message Queue
+}
+```
+
+## WaveDrom – Digital Timing Diagrams
+
+```wavedrom
+{ "signal": [
+  { "name": "clk",   "wave": "p........." },
+  { "name": "req",   "wave": "0.1..0...." },
+  { "name": "ack",   "wave": "0..1..0..." },
+  { "name": "data",  "wave": "x..345x..." },
+  { "name": "valid", "wave": "0..1..0..." }
+]}
+```
+
 ## Kroki-powered Diagrams
 
 The following diagrams are rendered via [Kroki](https://kroki.io) and require

@@ -296,6 +296,77 @@ Alice -> Bob: Hello
 }
 test_preview_plantuml_has_viewbox
 
+# --- Native diagram types (via diagram-renderer.mjs) ---
+
+section "serve: native diagram types"
+
+test_preview_nomnoml() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```nomnoml
+[User] -> [App]
+[App] -> [Database]
+```' 2>&1) || true
+  assert_contains "$out" "<svg" "/preview nomnoml renders as inline SVG"
+  assert_not_contains "$out" "error" "/preview nomnoml has no error"
+}
+test_preview_nomnoml
+
+test_preview_d2() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```d2
+x -> y -> z
+```' 2>&1) || true
+  assert_contains "$out" "<svg" "/preview d2 renders as inline SVG"
+  assert_not_contains "$out" "error" "/preview d2 has no error"
+}
+test_preview_d2
+
+test_preview_svgbob() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```svgbob
+    +---+
+    | A |
+    +---+
+```' 2>&1) || true
+  assert_contains "$out" "<svg" "/preview svgbob renders as inline SVG"
+}
+test_preview_svgbob
+
+test_preview_dbml() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```dbml
+Table users {
+  id integer [primary key]
+  username varchar
+  email varchar
+}
+
+Table posts {
+  id integer [primary key]
+  title varchar
+  user_id integer [ref: > users.id]
+}
+```' 2>&1) || true
+  assert_contains "$out" "<svg" "/preview dbml renders as inline SVG"
+  assert_not_contains "$out" "error" "/preview dbml has no error"
+}
+test_preview_dbml
+
+test_preview_wavedrom() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```wavedrom
+{ "signal": [{ "name": "clk", "wave": "p....." }, { "name": "data", "wave": "x.345x" }] }
+```' 2>&1) || true
+  assert_contains "$out" "<svg" "/preview wavedrom renders as inline SVG"
+  assert_not_contains "$out" "error" "/preview wavedrom has no error"
+}
+test_preview_wavedrom
+
 stop_serve
 
 print_summary

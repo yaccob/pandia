@@ -675,6 +675,36 @@ Bob -> Alice: Hi
 }
 test_plantuml_no_preserveaspectratio_none
 
+# --- Node renderer: kroki fallback ---
+
+section "node renderer: kroki fallback for missing tools"
+
+test_d2_falls_back_to_kroki() {
+  local input='```d2
+x -> y -> z
+```'
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  PANDIA_KROKI_URL=https://kroki.io \
+    echo "$input" | pandoc --lua-filter="$FILTER" --from=gfm -t html5 2>"$tmpdir/err" > "$tmpdir/out" || true
+  local out err
+  out=$(cat "$tmpdir/out")
+  err=$(cat "$tmpdir/err")
+  rm -rf "$tmpdir"
+  assert_not_contains "$err" "command not found" \
+    "d2 must not fail with 'command not found' when kroki available"
+  assert_not_contains "$err" "rendering failed" \
+    "d2 must not report rendering failed when kroki available"
+  assert_contains "$out" "<img" \
+    "d2 produces image via kroki fallback"
+}
+# Only run if d2 is NOT installed locally (tests the fallback path)
+if ! command -v d2 >/dev/null 2>&1; then
+  test_d2_falls_back_to_kroki
+else
+  printf "  ${GREEN}SKIP${RESET} d2 kroki fallback: d2 installed locally\n"
+fi
+
 # --- Markmap container height ---
 
 section "markmap: HTML container height"
