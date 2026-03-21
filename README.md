@@ -99,7 +99,8 @@ pandia [OPTIONS] <input.md>
 Options:
   -t, --to FORMAT       Output format: pdf, html (default: html; repeatable)
   --watch               Watch for changes and regenerate automatically
-  --serve [PORT]        Start persistent server (Docker mode, default port: 3300)
+  --serve [PORT]        Start HTTP API server (Docker mode, default port: 3300)
+                        (other options do not apply in server mode)
   -o, --output NAME     Base name for output files (default: derived from input)
   --maxwidth WIDTH      Max content width for HTML output (default: 60em)
   --center-math         Center block formulas (default: left-aligned)
@@ -111,27 +112,42 @@ Options:
   -h, --help            Show this help
 ```
 
-### HTTP API
+### Server Mode (`--serve`)
 
-When running with `--serve`, pandia exposes an HTTP API:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check — returns `ok` |
-| `/render` | POST | Render a file on disk to PDF/HTML |
-| `/preview` | POST | Render Markdown content to self-contained HTML |
-
-**`/preview`** accepts raw Markdown as the request body and returns fully
-self-contained HTML with all images inlined as SVG and math rendered as MathML.
-Options are passed as query parameters (e.g. `?maxwidth=40em`).
+`--serve` starts pandia as an HTTP server inside a Docker/Podman container.
+CLI options like `-t`, `-o`, `--watch`, `--maxwidth`, `--center-math` do **not**
+apply in server mode — rendering parameters are passed per-request via the API.
 
 ```bash
-curl -X POST http://localhost:3300/preview \
-  -H "Content-Type: text/plain" \
-  -d '# Hello
-```graphviz
-digraph { A -> B; }
-```'
+docker run -d -p 3300:3300 -v "$PWD:/data" --name pandia yaccob/pandia --serve
+```
+
+### HTTP API
+
+The server exposes three endpoints. See [`openapi.yaml`](openapi.yaml) for the
+full OpenAPI 3.0 specification.
+
+| Endpoint | Method | Input | Output | Use Case |
+|----------|--------|-------|--------|----------|
+| `/health` | GET | — | `ok` (text) | Health check / readiness probe |
+| `/render` | GET, POST | File path on disk | JSON with generated file paths | Batch rendering, CI pipelines |
+| `/preview` | POST | Raw Markdown (body) | Self-contained HTML | Live preview, editor integrations |
+
+**`/render`** reads a `.md` file from the container's `/data` volume, writes
+output files (`.html`, `.pdf`) next to it, and returns the list of generated
+file paths. The container must be started with `-v "$PWD:/data"`.
+
+**`/preview`** is stateless: it accepts raw Markdown as the request body and
+returns self-contained HTML with all images inlined as SVG and math rendered
+as MathML. No files are written to disk. Designed for editor integrations
+like the VS Code extension.
+
+```bash
+# Render a file on disk
+curl -X POST http://localhost:3300/render -d "file=example.md&to=pdf,html"
+
+# Live preview (stateless)
+curl -X POST http://localhost:3300/preview -d '# Hello World'
 ```
 
 ### Examples

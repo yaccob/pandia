@@ -260,6 +260,39 @@ test_preview_default_maxwidth() {
 }
 test_preview_default_maxwidth
 
+# --- Request validation ---
+
+section "serve: request validation"
+
+test_render_invalid_format() {
+  local out http_code
+  out=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:${SERVE_PORT}/render" \
+    -d "file=test.md&to=docx" 2>&1) || true
+  http_code=$(echo "$out" | tail -1)
+  body=$(echo "$out" | sed '$d')
+  assert_contains "$http_code" "400" "/render rejects invalid format 'docx'"
+  assert_contains "$body" "error" "/render returns error for invalid format"
+}
+test_render_invalid_format
+
+test_preview_wrong_method() {
+  local out http_code
+  out=$(curl -s -w "\n%{http_code}" "http://localhost:${SERVE_PORT}/preview" 2>&1) || true
+  http_code=$(echo "$out" | tail -1)
+  assert_contains "$http_code" "405" "/preview GET returns 405 Method Not Allowed"
+}
+test_preview_wrong_method
+
+test_render_get_invalid_format() {
+  local out http_code
+  out=$(curl -s -w "\n%{http_code}" "http://localhost:${SERVE_PORT}/render?file=test.md&to=docx" 2>&1) || true
+  http_code=$(echo "$out" | tail -1)
+  body=$(echo "$out" | sed '$d')
+  assert_contains "$http_code" "400" "/render GET rejects invalid format"
+  assert_contains "$body" "error" "/render GET returns error for invalid format"
+}
+test_render_get_invalid_format
+
 # --- SVG quality checks for preview ---
 
 section "serve: SVG quality in /preview"

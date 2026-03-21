@@ -24,6 +24,8 @@ const PORT = parseInt(process.env.PANDIA_PORT || '3300')
 const FILTER = '/usr/local/share/pandoc/filters/diagram-filter.lua'
 const PANDOC_COMMON = `--lua-filter=${FILTER} --from=gfm+tex_math_dollars`
 
+const VALID_FORMATS = new Set(['html', 'pdf'])
+
 function parseBody (req) {
   return new Promise((resolve, reject) => {
     let body = ''
@@ -128,6 +130,11 @@ const server = createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: 'Missing "file" parameter' }))
       }
       const formats = (params.to || 'html').split(',').map(s => s.trim())
+      const invalid = formats.filter(f => !VALID_FORMATS.has(f))
+      if (invalid.length > 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ error: `Invalid format: ${invalid.join(', ')}. Valid formats: html, pdf` }))
+      }
       const maxwidth = params.maxwidth || '60em'
       const files = await render(file, formats, maxwidth)
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -148,6 +155,11 @@ const server = createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: 'Missing "file" parameter' }))
       }
       const formats = (url.searchParams.get('to') || 'html').split(',').map(s => s.trim())
+      const invalid = formats.filter(f => !VALID_FORMATS.has(f))
+      if (invalid.length > 0) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ error: `Invalid format: ${invalid.join(', ')}. Valid formats: html, pdf` }))
+      }
       const maxwidth = url.searchParams.get('maxwidth') || '60em'
       const files = await render(file, formats, maxwidth)
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -177,6 +189,17 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: err.message }))
     }
     return
+  }
+
+  // Method not allowed
+  if (url.pathname === '/preview' && req.method !== 'POST') {
+    res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': 'POST' })
+    return res.end(JSON.stringify({ error: 'Method not allowed. Use POST.' }))
+  }
+
+  if (url.pathname === '/render' && !['GET', 'POST'].includes(req.method)) {
+    res.writeHead(405, { 'Content-Type': 'application/json', 'Allow': 'GET, POST' })
+    return res.end(JSON.stringify({ error: 'Method not allowed. Use GET or POST.' }))
   }
 
   res.writeHead(404, { 'Content-Type': 'text/plain' })
