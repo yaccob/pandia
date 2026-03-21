@@ -42,13 +42,21 @@ function parseBody (req) {
   })
 }
 
-function buildCmd (file, fmt, base, maxwidth) {
+function buildCmd (file, fmt, base, { maxwidth = '60em', center_math = false } = {}) {
   if (fmt === 'pdf') {
-    return `pandoc ${PANDOC_COMMON} --to=pdf --pdf-engine=pdflatex`
-      + ` -V geometry:margin=2.5cm --standalone -o "${base}.pdf" "${file}"`
+    let cmd = `pandoc ${PANDOC_COMMON} --to=pdf --pdf-engine=pdflatex`
+      + ` -V geometry:margin=2.5cm`
+    if (!center_math) cmd += ` -V classoption=fleqn`
+    cmd += ` --standalone -o "${base}.pdf" "${file}"`
+    return cmd
   } else if (fmt === 'html') {
-    return `pandoc ${PANDOC_COMMON} --to=html5 --standalone --mathjax`
-      + ` -V maxwidth="${maxwidth || '60em'}" -o "${base}.html" "${file}"`
+    let cmd = `pandoc ${PANDOC_COMMON} --to=html5 --standalone --embed-resources --mathjax`
+      + ` -V maxwidth="${maxwidth}"`
+    if (!center_math) {
+      cmd += ` -V "header-includes=<script>window.MathJax={chtml:{displayAlign:'left'}};</script>"`
+    }
+    cmd += ` -o "${base}.html" "${file}"`
+    return cmd
   }
   throw new Error(`Unknown format: ${fmt}`)
 }
@@ -62,20 +70,21 @@ function execAsync (cmd, opts) {
   })
 }
 
-async function render (file, formats, maxwidth) {
+async function render (file, formats, { maxwidth = '60em', center_math = false, kroki_server } = {}) {
   const base = file.replace(/\.md$/, '')
   const env = { ...process.env, PANDIA_PARALLEL: '1' }
+  if (kroki_server) env.PANDIA_KROKI_URL = kroki_server
   const opts = { cwd: '/data', env }
 
   // Run all formats in parallel
   await Promise.all(formats.map(fmt =>
-    execAsync(buildCmd(file, fmt, base, maxwidth), opts)
+    execAsync(buildCmd(file, fmt, base, { maxwidth, center_math }), opts)
   ))
 
   return formats.map(fmt => `${base}.${fmt}`)
 }
 
-async function preview (content, { maxwidth = '60em', kroki_server } = {}) {
+async function preview (content, { maxwidth = '60em', kroki_server, center_math = false } = {}) {
   // Create isolated temp dir for this render
   const id = randomBytes(6).toString('hex')
   const workdir = join(tmpdir(), `pandia-preview-${id}`)
@@ -136,8 +145,12 @@ const server = createServer(async (req, res) => {
         res.writeHead(400, { 'Content-Type': 'application/json' })
         return res.end(JSON.stringify({ error: `Invalid format: ${invalid.join(', ')}. Valid formats: html, pdf` }))
       }
-      const maxwidth = params.maxwidth || '60em'
-      const files = await render(file, formats, maxwidth)
+      const opts = {
+        maxwidth: params.maxwidth || '60em',
+        center_math: params.center_math === 'true' || params.center_math === true,
+        kroki_server: params.kroki_server || undefined,
+      }
+      const files = await render(file, formats, opts)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, files }))
     } catch (err) {
@@ -161,8 +174,12 @@ const server = createServer(async (req, res) => {
         res.writeHead(400, { 'Content-Type': 'application/json' })
         return res.end(JSON.stringify({ error: `Invalid format: ${invalid.join(', ')}. Valid formats: html, pdf` }))
       }
-      const maxwidth = url.searchParams.get('maxwidth') || '60em'
-      const files = await render(file, formats, maxwidth)
+      const opts = {
+        maxwidth: url.searchParams.get('maxwidth') || '60em',
+        center_math: url.searchParams.get('center_math') === 'true',
+        kroki_server: url.searchParams.get('kroki_server') || undefined,
+      }
+      const files = await render(file, formats, opts)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, files }))
     } catch (err) {
@@ -182,6 +199,7 @@ const server = createServer(async (req, res) => {
       const opts = {
         maxwidth: url.searchParams.get('maxwidth') || '60em',
         kroki_server: url.searchParams.get('kroki_server') || undefined,
+        center_math: url.searchParams.get('center_math') === 'true',
       }
       const html = await preview(content, opts)
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
