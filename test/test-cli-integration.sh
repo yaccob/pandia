@@ -77,15 +77,17 @@ else
   FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "Markmap"
 fi
 
-# Check Kroki sections if present in the HTML (rendered with --kroki-server)
-if grep -q 'Kroki-powered' "$HTML" 2>/dev/null; then
+# Check Kroki sections only if kroki was actually used (rendered diagrams present)
+if grep -q 'img/kroki-' "$HTML" 2>/dev/null; then
   printf "\n${BOLD}Kroki-powered diagram types:${RESET}\n"
   for section in "${KROKI_SECTIONS[@]}"; do
-    # Only check if this section heading exists in the HTML
     if grep -q "$section" "$HTML" 2>/dev/null; then
       check_section "$section"
     fi
   done
+else
+  printf "\n${BOLD}Kroki-powered diagram types:${RESET}\n"
+  printf "  SKIP  No --kroki-server used\n"
 fi
 
 # Detect any code blocks that should have been rendered (catch-all)
@@ -108,8 +110,8 @@ else
         fi
         ;;
       bpmn|erd|pikchr|svgbob|vega|vegalite|excalidraw|structurizr)
-        # Kroki-only types — only a problem if kroki was configured
-        if grep -q 'Kroki-powered' "$HTML" 2>/dev/null; then
+        # Kroki-only types — only a problem if kroki was actually used
+        if grep -q 'img/kroki-' "$HTML" 2>/dev/null; then
           FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} Unrendered: %s (kroki configured but not rendered)\n" "$classname"
         else
           printf "  SKIP Unrendered %s (needs --kroki-server)\n" "$classname"

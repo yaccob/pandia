@@ -743,12 +743,21 @@ end
 -- Mermaid rendering (server mode)
 ------------------------------------------------------------------------
 
+-- Resolve a path to absolute (needed when mermaid server has different CWD)
+local function abspath(path)
+  if path:sub(1, 1) == "/" then return path end
+  local pipe = io.popen("pwd")
+  local cwd = pipe:read("*l")
+  pipe:close()
+  return cwd .. "/" .. path
+end
+
 local function execute_mermaid_server(mermaid_jobs)
   local parts = {}
   for _, job in ipairs(mermaid_jobs) do
     parts[#parts + 1] = "(wget -q -O /dev/null '"
-      .. mermaid_server .. "/render?in=" .. job.infile
-      .. "&out=" .. job.outfile .. "&fmt=" .. job.fmt .. "') &"
+      .. mermaid_server .. "/render?in=" .. abspath(job.infile)
+      .. "&out=" .. abspath(job.outfile) .. "&fmt=" .. job.fmt .. "') &"
   end
   parts[#parts + 1] = "wait"
   os.execute(table.concat(parts, " "))
