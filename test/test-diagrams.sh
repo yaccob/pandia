@@ -477,6 +477,11 @@ test_markmap_whitespace_only
 section "markmap: PDF output"
 
 test_markmap_pdf() {
+  # Markmap PDF requires puppeteer (via mermaid-cli) — skip if not available
+  if ! node -e "require('puppeteer')" 2>/dev/null; then
+    printf "  ${GREEN}SKIP${RESET} Markmap PDF: puppeteer not available (container-only)\n"
+    return
+  fi
   local input='```markmap
 # Root
 ## Branch A
@@ -685,8 +690,7 @@ x -> y -> z
 ```'
   local tmpdir
   tmpdir=$(mktemp -d)
-  PANDIA_KROKI_URL=https://kroki.io \
-    echo "$input" | pandoc --lua-filter="$FILTER" --from=gfm -t html5 2>"$tmpdir/err" > "$tmpdir/out" || true
+  echo "$input" | PANDIA_KROKI_URL=https://kroki.io pandoc --lua-filter="$FILTER" --from=gfm -t html5 2>"$tmpdir/err" > "$tmpdir/out" || true
   local out err
   out=$(cat "$tmpdir/out")
   err=$(cat "$tmpdir/err")
