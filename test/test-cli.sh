@@ -194,14 +194,14 @@ if $KROKI_AVAILABLE; then
   test_cli_kroki_server() {
     local tmpdir
     tmpdir=$(mktemp -d)
-    printf '# Kroki\n\n```nomnoml\n[A] -> [B]\n```\n' > "$tmpdir/input.md"
+    printf '# Kroki\n\n```pikchr\nbox "A"; arrow; box "B"\n```\n' > "$tmpdir/input.md"
     cp "$FILTER" "$tmpdir/"
     local out
     out=$(cd "$tmpdir" && "$PANDIA" -t html -o "$tmpdir/out" --kroki-server https://kroki.io --local input.md 2>&1) || true
     assert_file_exists "$tmpdir/out.html" "--kroki-server produces HTML output"
     local content
     content=$(cat "$tmpdir/out.html" 2>/dev/null) || true
-    assert_contains "$content" "kroki-" "--kroki-server renders kroki diagram"
+    assert_contains "$content" "kroki-" "--kroki-server renders kroki-only diagram type (pikchr)"
     rm -rf "$tmpdir"
   }
   test_cli_kroki_server
