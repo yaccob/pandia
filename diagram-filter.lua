@@ -663,6 +663,14 @@ local function execute_all()
     local errfile = puml_jobs[1].errfile
     local rcfile = puml_jobs[1].rcfile
     local puml_cmd = "plantuml -tsvg " .. table.concat(puml_files, " ")
+    -- PlantUML emits preserveAspectRatio="none" which prevents proportional
+    -- scaling in browsers. Remove it so SVGs scale correctly.
+    for _, job in ipairs(puml_jobs) do
+      local svg = job.svgfile or job.outfile
+      puml_cmd = puml_cmd
+        .. " && sed 's/ preserveAspectRatio=\"none\"//g' " .. svg .. " > " .. svg .. ".tmp"
+        .. " && mv " .. svg .. ".tmp " .. svg
+    end
     if is_pdf then
       for _, job in ipairs(puml_jobs) do
         puml_cmd = puml_cmd

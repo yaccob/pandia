@@ -8,7 +8,7 @@ VERSION  := 1.4.0
 
 PANDOC_COMMON := --lua-filter=$(FILTER) --from=gfm+tex_math_dollars
 
-.PHONY: all pdf html clean test test-quick docker-pdf docker-html docker-all docker-build docker-push docker-test
+.PHONY: all pdf html clean test test-quick vscode-ext vscode-install docker-pdf docker-html docker-all docker-build docker-push docker-test
 
 # --- Local targets (require pandoc + tools installed) ---
 
@@ -48,6 +48,14 @@ test-quick:
 	bash test/test-diagrams.sh
 	bash test/test-robustness.sh
 	bash test/test-cli.sh
+
+# --- VS Code extension ---
+
+vscode-ext:
+	cd pandia-vscode && npm install && npx tsc && npx @vscode/vsce package --allow-missing-repository
+
+vscode-install: vscode-ext
+	code --install-extension pandia-vscode/pandia-preview-*.vsix
 
 # --- Docker targets ---
 

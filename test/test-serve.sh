@@ -19,11 +19,13 @@ start_serve() {
   SERVE_TMPDIR=$(mktemp -d)
   echo '# Serve Test' > "$SERVE_TMPDIR/test-serve.md"
 
-  # Mount current pandia-server.mjs to test latest code
+  # Mount current source files to test latest code
   $CONTAINER_RT run --rm -d --name "$SERVE_CONTAINER" \
     -p "${SERVE_PORT}:${SERVE_PORT}" \
     -v "$SERVE_TMPDIR:/data" \
     -v "$PROJECT_DIR/pandia-server.mjs:/usr/local/share/pandia/pandia-server.mjs:ro" \
+    -v "$PROJECT_DIR/diagram-filter.lua:/usr/local/share/pandoc/filters/diagram-filter.lua:ro" \
+    -v "$PROJECT_DIR/markmap-render.mjs:/usr/local/share/pandia/markmap-render.mjs:ro" \
     yaccob/pandia --serve "$SERVE_PORT" >/dev/null 2>&1
 
   local i=0
@@ -187,14 +189,18 @@ test_preview_math_mathml() {
 test_preview_math_mathml
 
 test_preview_markmap() {
-  local out
-  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+  local out http_code
+  out=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:${SERVE_PORT}/preview" \
     --data-binary '```markmap
 # Root
 ## A
 ## B
 ```' 2>&1) || true
-  assert_contains "$out" "markmap" "/preview markmap contains markmap reference"
+  http_code=$(echo "$out" | tail -1)
+  out=$(echo "$out" | sed '$d')
+  assert_contains "$http_code" "200" "/preview markmap returns 200 (not 500)"
+  assert_not_contains "$out" "markmap error" "/preview markmap does not contain error message"
+  assert_not_contains "$out" "markmap-render.mjs failed" "/preview markmap render does not fail"
   assert_contains "$out" "Root" "/preview markmap includes node content"
 }
 test_preview_markmap
@@ -253,6 +259,42 @@ test_preview_default_maxwidth() {
   assert_contains "$out" "60em" "/preview uses 60em default maxwidth"
 }
 test_preview_default_maxwidth
+
+# --- SVG quality checks for preview ---
+
+section "serve: SVG quality in /preview"
+
+test_preview_svg_has_viewbox() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```graphviz
+digraph { A -> B; }
+```' 2>&1) || true
+  assert_contains "$out" "viewBox" "/preview SVG has viewBox attribute (needed for scaling)"
+}
+test_preview_svg_has_viewbox
+
+test_preview_plantuml_no_preserveaspectratio_none() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```plantuml
+Alice -> Bob: Hello
+```' 2>&1) || true
+  assert_contains "$out" "<svg" "/preview plantuml renders as SVG"
+  assert_not_contains "$out" 'preserveAspectRatio="none"' \
+    "/preview plantuml SVG must not have preserveAspectRatio=none (breaks scaling)"
+}
+test_preview_plantuml_no_preserveaspectratio_none
+
+test_preview_plantuml_has_viewbox() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```plantuml
+Alice -> Bob: Hello
+```' 2>&1) || true
+  assert_contains "$out" "viewBox" "/preview plantuml SVG has viewBox"
+}
+test_preview_plantuml_has_viewbox
 
 stop_serve
 

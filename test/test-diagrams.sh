@@ -639,5 +639,41 @@ test_stale_tikz() {
 }
 test_stale_tikz
 
+# --- SVG quality: preserveAspectRatio ---
+
+section "svg quality: PlantUML scaling"
+
+test_plantuml_no_preserveaspectratio_none() {
+  local input='```plantuml
+Alice -> Bob: Hello
+Bob -> Alice: Hi
+```'
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  echo "$input" | pandoc --lua-filter="$FILTER" --from=gfm -t html5 2>"$tmpdir/err" > "$tmpdir/out" || true
+  local out
+  out=$(cat "$tmpdir/out")
+  local err
+  err=$(cat "$tmpdir/err")
+  rm -rf "$tmpdir"
+
+  # Filter must not crash (nil svgfile)
+  assert_not_contains "$err" "attempt to concatenate a nil" \
+    "PlantUML HTML render must not crash on nil svgfile"
+
+  # sed must work on both macOS (BSD) and Linux (GNU)
+  assert_not_contains "$err" "command i expects" \
+    "sed must work on macOS (BSD sed)"
+  assert_not_contains "$err" "rendering failed" \
+    "PlantUML rendering must not fail"
+  assert_contains "$out" "<img" \
+    "PlantUML produces image output"
+
+  # SVG must not have preserveAspectRatio="none" (breaks proportional scaling)
+  assert_not_contains "$out" 'preserveAspectRatio="none"' \
+    "PlantUML SVG must not have preserveAspectRatio=none"
+}
+test_plantuml_no_preserveaspectratio_none
+
 print_summary
 exit $FAIL

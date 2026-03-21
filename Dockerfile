@@ -35,8 +35,8 @@ RUN mkdir -p /opt/plantuml && \
     printf '#!/bin/sh\nexec java -jar /opt/plantuml/plantuml.jar "$@"\n' > /usr/local/bin/plantuml && \
     chmod +x /usr/local/bin/plantuml
 
-# Mermaid CLI (with Chromium config for container use)
-RUN npm install -g @mermaid-js/mermaid-cli && \
+# Mermaid CLI (with Chromium config for container use) and Markmap CLI
+RUN npm install -g @mermaid-js/mermaid-cli markmap-cli && \
     printf '{\n  "executablePath": "/usr/bin/chromium-browser",\n  "args": ["--no-sandbox", "--disable-gpu"]\n}\n' \
       > /etc/mermaid-puppeteer-config.json
 
@@ -48,6 +48,9 @@ COPY diagram-filter.lua /usr/local/share/pandoc/filters/diagram-filter.lua
 
 # Mermaid render server (placed inside mermaid-cli for correct import resolution)
 COPY mermaid-server.mjs /usr/local/lib/node_modules/@mermaid-js/mermaid-cli/mermaid-server.mjs
+
+# Markmap renderer
+COPY markmap-render.mjs /usr/local/share/pandia/markmap-render.mjs
 
 # Pandia HTTP server
 COPY pandia-server.mjs /usr/local/share/pandia/pandia-server.mjs
