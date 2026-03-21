@@ -4,3 +4,4 @@ img/
 .docker-test/
 .brew-test/
 .claude/
+.vscode/

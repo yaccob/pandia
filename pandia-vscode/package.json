@@ -1,0 +1,54 @@
+{
+  "name": "pandia-preview",
+  "displayName": "Pandia Preview",
+  "description": "Live preview for Markdown with diagrams (PlantUML, Graphviz, Mermaid, Markmap, TikZ, and more)",
+  "version": "0.1.0",
+  "publisher": "yaccob",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "pandia.openPreview",
+        "title": "Pandia: Open Preview"
+      }
+    ],
+    "configuration": {
+      "title": "Pandia Preview",
+      "properties": {
+        "pandia.serverUrl": {
+          "type": "string",
+          "default": "",
+          "description": "URL of a running pandia server (e.g. http://localhost:3300). If empty, a container is started automatically."
+        },
+        "pandia.containerImage": {
+          "type": "string",
+          "default": "yaccob/pandia:latest",
+          "description": "Docker/Podman image to use for the pandia server."
+        },
+        "pandia.port": {
+          "type": "number",
+          "default": 3300,
+          "description": "Port for the pandia server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "node --test test/*.test.mjs",
+    "pretest": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
