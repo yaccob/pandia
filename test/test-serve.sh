@@ -19,9 +19,11 @@ start_serve() {
   SERVE_TMPDIR=$(mktemp -d)
   echo '# Serve Test' > "$SERVE_TMPDIR/test-serve.md"
 
+  # Mount current pandia-server.mjs to test latest code
   $CONTAINER_RT run --rm -d --name "$SERVE_CONTAINER" \
     -p "${SERVE_PORT}:${SERVE_PORT}" \
     -v "$SERVE_TMPDIR:/data" \
+    -v "$PROJECT_DIR/pandia-server.mjs:/usr/local/share/pandia/pandia-server.mjs:ro" \
     yaccob/pandia --serve "$SERVE_PORT" >/dev/null 2>&1
 
   local i=0
@@ -124,6 +126,133 @@ test_serve_404() {
   assert_contains "$http_code" "404" "Unknown route returns 404"
 }
 test_serve_404
+
+# --- /preview endpoint ------------------------------------------------
+
+section "serve: /preview endpoint"
+
+test_preview_basic_html() {
+  local out
+  out=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '# Hello
+
+Some text' 2>&1) || true
+  local http_code body
+  http_code=$(echo "$out" | tail -1)
+  body=$(echo "$out" | sed '$d')
+  assert_contains "$http_code" "200" "/preview returns 200"
+  assert_contains "$body" "Hello" "/preview output contains heading"
+}
+test_preview_basic_html
+
+test_preview_returns_html_content_type() {
+  local headers
+  headers=$(curl -s -D - -o /dev/null -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '# Test' 2>&1) || true
+  assert_contains "$headers" "text/html" "/preview returns text/html content type"
+}
+test_preview_returns_html_content_type
+
+test_preview_graphviz_inline() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '# Graph
+
+```graphviz
+digraph { A -> B; }
+```' 2>&1) || true
+  assert_contains "$out" "<svg" "/preview graphviz is rendered as inline SVG"
+  assert_not_contains "$out" "img/graphviz" "/preview graphviz does not reference filesystem path"
+}
+test_preview_graphviz_inline
+
+test_preview_dir_block() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```dir
+root
+  child
+```' 2>&1) || true
+  assert_contains "$out" "<svg" "/preview dir block renders SVG inline"
+}
+test_preview_dir_block
+
+test_preview_math_mathml() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary 'Euler: $e^{i\pi}+1=0$' 2>&1) || true
+  assert_contains "$out" "<math" "/preview renders math as MathML (no MathJax needed)"
+  assert_not_contains "$out" "mathjax" "/preview does not include MathJax script"
+}
+test_preview_math_mathml
+
+test_preview_markmap() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```markmap
+# Root
+## A
+## B
+```' 2>&1) || true
+  assert_contains "$out" "markmap" "/preview markmap contains markmap reference"
+  assert_contains "$out" "Root" "/preview markmap includes node content"
+}
+test_preview_markmap
+
+test_preview_empty_body() {
+  local out
+  out=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:${SERVE_PORT}/preview" \
+    -d '' 2>&1) || true
+  local http_code body
+  http_code=$(echo "$out" | tail -1)
+  body=$(echo "$out" | sed '$d')
+  assert_contains "$http_code" "400" "/preview with empty body returns 400"
+  assert_contains "$body" "error" "/preview with empty body returns error message"
+}
+test_preview_empty_body
+
+test_preview_whitespace_only() {
+  local out
+  out=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '   ' 2>&1) || true
+  local http_code
+  http_code=$(echo "$out" | tail -1)
+  assert_contains "$http_code" "400" "/preview with whitespace-only body returns 400"
+}
+test_preview_whitespace_only
+
+test_preview_multiple_diagrams() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '```graphviz
+digraph{A->B}
+```
+
+```graphviz
+digraph{C->D}
+```' 2>&1) || true
+  local count
+  count=$(echo "$out" | grep -o "<svg" | wc -l | tr -d ' ')
+  [[ "$count" -ge 2 ]] && { PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "/preview inlines multiple diagrams as SVG"; } \
+    || { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "/preview inlines multiple diagrams as SVG"; ERRORS="${ERRORS}\n  FAIL: expected >=2 <svg>, got $count"; }
+}
+test_preview_multiple_diagrams
+
+test_preview_maxwidth_param() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview?maxwidth=40em" \
+    --data-binary '# Width test' 2>&1) || true
+  assert_contains "$out" "40em" "/preview respects maxwidth query parameter"
+}
+test_preview_maxwidth_param
+
+test_preview_default_maxwidth() {
+  local out
+  out=$(curl -s -X POST "http://localhost:${SERVE_PORT}/preview" \
+    --data-binary '# Width test' 2>&1) || true
+  assert_contains "$out" "60em" "/preview uses 60em default maxwidth"
+}
+test_preview_default_maxwidth
 
 stop_serve
 
