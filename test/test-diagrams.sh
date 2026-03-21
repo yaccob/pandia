@@ -484,8 +484,16 @@ test_markmap_pdf() {
 ```'
   run_filter_pdf_keep "$input"
   local found
-  found=$(ls "$WORK_DIR"/img/markmap-*.png 2>/dev/null | head -1) || true
-  assert_file_exists "${found:-/nonexistent}" "Markmap produces PNG for PDF output"
+  found=$(ls "$WORK_DIR"/img/markmap-*.pdf 2>/dev/null | head -1) || true
+  assert_file_exists "${found:-/nonexistent}" "Markmap produces PDF for PDF output"
+
+  # The PDF must contain the actual text — not just lines/circles
+  if [[ -n "$found" && -f "$found" ]]; then
+    local pdftext
+    pdftext=$(pdftotext "$found" - 2>/dev/null) || true
+    assert_contains "$pdftext" "Root" "Markmap PDF contains node text 'Root'"
+    assert_contains "$pdftext" "Branch A" "Markmap PDF contains node text 'Branch A'"
+  fi
   teardown_workdir
 }
 test_markmap_pdf

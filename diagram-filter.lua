@@ -473,16 +473,17 @@ local function prepare_markmap_pdf(code)
   filecounter = filecounter + 1
   local basename = imgdir .. "/markmap-" .. filecounter
   local infile = basename .. ".md"
-  local outfile = basename .. ".png"
+  local outfile = basename .. ".pdf"
 
   local f = io.open(infile, "w")
   f:write(code)
   f:close()
 
+  -- Render to vector PDF via headless browser (Chromium page.pdf())
   local cmd = "node " .. render_script
     .. " --input " .. infile
     .. " --output " .. outfile
-    .. " --format png"
+    .. " --format pdf"
     .. " --id " .. filecounter
 
   return {

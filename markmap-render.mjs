@@ -142,29 +142,13 @@ async function generateHtmlFragment (content, id) {
   return fragment
 }
 
-async function generatePng (content, id, outputPath) {
-  // Generate a full HTML page for rendering
-  const { Transformer, fillTemplate } = await importMarkmap()
-  const t = new Transformer()
-  const { root, features } = t.transform(content)
-  const assets = t.getUsedAssets(features)
-  const html = fillTemplate(root, assets)
-
-  // Write temp HTML
-  const tmpHtml = outputPath.replace(/\.[^.]+$/, '.html')
-  writeFileSync(tmpHtml, html)
-
-  // Use puppeteer to render to PNG — try multiple locations
+async function loadPuppeteer () {
   let puppeteer
   const puppeteerEsmPaths = [
-    // Via mermaid-cli (Homebrew)
     '/opt/homebrew/lib/node_modules/@mermaid-js/mermaid-cli/node_modules/puppeteer/lib/esm/puppeteer/puppeteer.js',
-    // Via mermaid-cli (global npm / container)
     '/usr/local/lib/node_modules/@mermaid-js/mermaid-cli/node_modules/puppeteer/lib/esm/puppeteer/puppeteer.js',
-    // Standalone global
     '/usr/local/lib/node_modules/puppeteer/lib/esm/puppeteer/puppeteer.js',
   ]
-  // Try bare specifier first (works if puppeteer is in NODE_PATH or local)
   try { puppeteer = await import('puppeteer') } catch {}
   if (!puppeteer) {
     for (const p of puppeteerEsmPaths) {
@@ -172,9 +156,24 @@ async function generatePng (content, id, outputPath) {
     }
   }
   if (!puppeteer) {
-    process.stderr.write('markmap PNG export requires puppeteer (install puppeteer or @mermaid-js/mermaid-cli)\n')
+    process.stderr.write('markmap SVG export requires puppeteer (install puppeteer or @mermaid-js/mermaid-cli)\n')
     process.exit(1)
   }
+  return puppeteer
+}
+
+async function generatePdf (content, id, outputPath) {
+  // Generate a full HTML page, render in headless browser, print to vector PDF
+  const { Transformer, fillTemplate } = await importMarkmap()
+  const t = new Transformer()
+  const { root, features } = t.transform(content)
+  const assets = t.getUsedAssets(features)
+  const html = fillTemplate(root, assets)
+
+  const tmpHtml = outputPath.replace(/\.[^.]+$/, '.html')
+  writeFileSync(tmpHtml, html)
+
+  const puppeteer = await loadPuppeteer()
 
   const puppeteerConfig = process.env.MMDC_PUPPETEER_CONFIG
   const launchOpts = { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
@@ -187,38 +186,67 @@ async function generatePng (content, id, outputPath) {
 
   const browser = await puppeteer.default.launch(launchOpts)
   const page = await browser.newPage()
-  await page.setViewport({ width: 1200, height: 800 })
+  await page.setViewport({ width: 1600, height: 1200 })
   await page.goto(`file://${resolve(tmpHtml)}`, { waitUntil: 'networkidle0' })
 
-  // Wait for markmap to render
   await page.waitForSelector('svg#mindmap g', { timeout: 10000 })
-  // Small delay for animations
   await new Promise(r => setTimeout(r, 500))
 
-  // Get the bounding box of the SVG content
-  const clip = await page.evaluate(() => {
+  // Fit the SVG precisely to its content and resize the page to match
+  const dims = await page.evaluate(() => {
     const svg = document.querySelector('svg#mindmap')
     if (!svg) return null
     const g = svg.querySelector('g')
     if (!g) return null
-    const rect = g.getBoundingClientRect()
-    return {
-      x: Math.max(0, rect.x - 10),
-      y: Math.max(0, rect.y - 10),
-      width: rect.width + 20,
-      height: rect.height + 20
-    }
+
+    // Get the SVG-internal bounding box (unaffected by CSS transforms)
+    const bbox = g.getBBox()
+    const pad = 20
+
+    // Set the SVG viewBox to tightly frame the content
+    const vbX = bbox.x - pad
+    const vbY = bbox.y - pad
+    const vbW = bbox.width + 2 * pad
+    const vbH = bbox.height + 2 * pad
+    svg.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`)
+
+    // Remove the centering transform so content sits at origin
+    g.removeAttribute('transform')
+
+    // Set explicit pixel dimensions on the SVG
+    const width = Math.ceil(vbW)
+    const height = Math.ceil(vbH)
+    svg.style.width = width + 'px'
+    svg.style.height = height + 'px'
+
+    // Resize body to fit
+    document.body.style.margin = '0'
+    document.body.style.padding = '0'
+    document.body.style.overflow = 'hidden'
+
+    return { width, height }
   })
 
-  if (clip) {
-    await page.screenshot({ path: outputPath, clip, omitBackground: true })
-  } else {
-    await page.screenshot({ path: outputPath, omitBackground: true })
+  if (!dims) {
+    await browser.close()
+    try { unlinkSync(tmpHtml) } catch {}
+    process.stderr.write('markmap error: failed to measure rendered content\n')
+    process.exit(1)
   }
 
-  await browser.close()
+  // Resize viewport to content, then print to PDF at exact content size
+  await page.setViewport({ width: dims.width, height: dims.height })
+  await new Promise(r => setTimeout(r, 200))
 
-  // Clean up temp HTML
+  await page.pdf({
+    path: outputPath,
+    width: `${dims.width}px`,
+    height: `${dims.height}px`,
+    printBackground: true,
+    margin: { top: '0px', right: '0px', bottom: '0px', left: '0px' }
+  })
+
+  await browser.close()
   try { unlinkSync(tmpHtml) } catch {}
 }
 
@@ -233,8 +261,8 @@ async function main () {
   if (format === 'html-fragment') {
     const fragment = await generateHtmlFragment(content, svgId)
     writeFileSync(outputFile, fragment)
-  } else if (format === 'png') {
-    await generatePng(content, svgId, outputFile)
+  } else if (format === 'pdf') {
+    await generatePdf(content, svgId, outputFile)
   } else {
     process.stderr.write(`markmap error: unknown format "${format}"\n`)
     process.exit(1)
