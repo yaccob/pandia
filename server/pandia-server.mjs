@@ -63,8 +63,7 @@ async function render (content, { format = 'html', math = 'mathml', maxwidth = '
   const env = { ...process.env, PANDIA_PARALLEL: '1' }
   if (kroki_server) env.PANDIA_KROKI_URL = kroki_server
 
-  let cmd = `pandoc --lua-filter=${FILTER} --from=gfm+tex_math_dollars`
-    + ` --embed-resources --standalone`
+  let cmd = `pandoc --lua-filter=${FILTER} --from=gfm+tex_math_dollars --standalone`
 
   if (format === 'pdf') {
     const outfile = join(workdir, 'output.pdf')
@@ -77,24 +76,27 @@ async function render (content, { format = 'html', math = 'mathml', maxwidth = '
     return { contentType: 'application/pdf', body: pdf }
   }
 
-  // HTML
+  // HTML — always use --embed-resources for self-contained output (inline SVGs).
+  // Both math engines use --mathml for pandoc rendering. For mathjax mode,
+  // the MathJax CDN script is injected after rendering — MathJax processes
+  // the <math> tags client-side and replaces them with its own rendering.
   const outfile = join(workdir, 'output.html')
-  if (math === 'mathjax') {
-    cmd += ` --to=html5 --mathjax=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js`
-    if (!center_math) {
-      cmd += ` -V "header-includes=<script>window.MathJax={chtml:{displayAlign:'left'}};</script>"`
-    }
-  } else {
-    cmd += ` --to=html5 --mathml`
-    if (!center_math) {
-      cmd += ` -V "header-includes=<style>math[display=block]{display:block!important;text-align:left!important}</style>"`
-    }
+  cmd += ` --embed-resources --to=html5 --mathml`
+  if (!center_math) {
+    cmd += ` -V "header-includes=<style>math[display=block]{display:block!important;text-align:left!important}</style>"`
   }
   cmd += ` -V maxwidth="${maxwidth}"`
   cmd += ` -o "${outfile}" "${infile}"`
 
   await execAsync(cmd, { cwd: workdir, env })
-  const html = readFileSync(outfile, 'utf-8')
+  let html = readFileSync(outfile, 'utf-8')
+
+  if (math === 'mathjax') {
+    // Inject MathJax CDN script before </body> — it will find and render <math> tags
+    const mathjaxConfig = center_math ? '' : `<script>window.MathJax={chtml:{displayAlign:'left'}};</script>\n`
+    const mathjaxScript = `${mathjaxConfig}<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>`
+    html = html.replace('</body>', `${mathjaxScript}\n</body>`)
+  }
   try { rmSync(workdir, { recursive: true }) } catch {}
   return { contentType: 'text/html; charset=utf-8', body: html }
 }

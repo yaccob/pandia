@@ -382,6 +382,47 @@ for (const check of checks) {
       break
     }
 
+    case 'math-fonts-loaded': {
+      // Check if the browser can actually use the fonts needed for math rendering.
+      // Uses document.fonts API to verify fonts load successfully — not an
+      // implementation check but a browser capability check: "can the browser
+      // render math with the intended fonts?"
+      const result = await page.evaluate(async () => {
+        await document.fonts.ready
+
+        const declaredFonts = []
+        const errorFonts = []
+        for (const font of document.fonts) {
+          declaredFonts.push(font.family)
+          if (font.status === 'error') {
+            errorFonts.push(font.family)
+          }
+        }
+
+        if (declaredFonts.length === 0) {
+          // No custom fonts declared (e.g. pure MathML) — not applicable
+          return { applicable: false }
+        }
+
+        return {
+          applicable: true,
+          declared: declaredFonts.length,
+          errors: errorFonts,
+          errorCount: errorFonts.length,
+        }
+      })
+
+      if (!result.applicable) {
+        ok('math-fonts-loaded (no custom fonts declared, not applicable)')
+      } else if (result.errorCount === 0) {
+        ok(`math-fonts-loaded (${result.declared} font(s) declared, all loaded)`)
+      } else {
+        const unique = [...new Set(result.errors)]
+        ng('math-fonts-loaded', `${result.errorCount} font(s) failed to load: ${unique.join(', ')}`)
+      }
+      break
+    }
+
     default:
       ng(`Unknown check: ${check}`)
   }

@@ -85,7 +85,34 @@ section "server: MathJax visual rendering"
 
 run_visual_check "MathJax" "$MATH_DIR/mathjax.html" \
   math-left-aligned math-rendered no-math-input-error \
-  sqrt-has-vinculum integral-tall fraction-stacked
+  sqrt-has-vinculum integral-tall fraction-stacked \
+  math-fonts-loaded
+
+# --- Diagrams must render with both math engines ---
+section "server: diagrams render with mathjax math engine"
+
+DIAGRAM_INPUT='# Diagram + MathJax Test
+
+```graphviz
+digraph { A -> B; }
+```
+
+$$x^2$$
+'
+
+printf '%s' "$DIAGRAM_INPUT" | curl -s -X POST "http://localhost:${SERVE_PORT}/render?math=mathjax" \
+  --data-binary @- > "$MATH_DIR/mathjax-diagrams.html" 2>&1 || true
+
+mathjax_diagram_html=$(cat "$MATH_DIR/mathjax-diagrams.html")
+# Diagrams may be inline SVG or base64-encoded data URIs
+if echo "$mathjax_diagram_html" | grep -q '<svg\|data:image/svg'; then
+  PASS=$((PASS + 1))
+  printf "  ${GREEN}PASS${RESET} MathJax mode renders diagrams as inline SVG\n"
+else
+  FAIL=$((FAIL + 1))
+  ERRORS="${ERRORS}\n  FAIL: MathJax mode renders diagrams as inline SVG"
+  printf "  ${RED}FAIL${RESET} MathJax mode renders diagrams as inline SVG\n"
+fi
 
 print_summary
 exit $FAIL
