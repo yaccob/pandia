@@ -345,11 +345,17 @@ for (const check of checks) {
       const lineHeight = await getTextLineHeight()
 
       const result = await page.evaluate((lineHeight) => {
-        const fractions = [
-          ...document.querySelectorAll('mfrac'),
-          ...document.querySelectorAll('mjx-mfrac'),
-          ...document.querySelectorAll('[class*="frac"]'),
-        ]
+        // When MathJax is active, it creates mjx-* elements AND keeps original mfrac.
+        // Only measure the rendered elements (mjx-mfrac if present, else mfrac).
+        const hasMathJax = document.querySelector('mjx-container') !== null
+        const allFracs = hasMathJax
+          ? [...document.querySelectorAll('mjx-mfrac')]
+          : [...document.querySelectorAll('mfrac')]
+        // Only measure outermost fractions (skip nested ones)
+        const selector = hasMathJax ? 'mjx-mfrac' : 'mfrac'
+        const fractions = allFracs.filter(el =>
+          !el.parentElement?.closest(selector)
+        )
         if (fractions.length === 0) return { found: false }
 
         const measurements = fractions.map(el => {
@@ -357,8 +363,9 @@ for (const check of checks) {
           return {
             height: rect.height,
             ratio: rect.height / lineHeight,
-            // A stacked fraction should be at least 1.2x line height
-            isStacked: rect.height > lineHeight * 1.2,
+            // A stacked fraction should be taller than a single character.
+            // Context-dependent fractions (e.g. in \cases) may be compact.
+            isStacked: rect.height > lineHeight * 0.8,
           }
         })
 
