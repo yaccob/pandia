@@ -21,8 +21,7 @@ That's it. No local tool installation needed.
 
 1. Install the extension:
    ```bash
-   cd pandia-vscode && make vscode-install
-   # or from the repo root:
+   # From the repo root:
    make vscode-install
    ```
 

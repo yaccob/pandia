@@ -4,6 +4,8 @@ set -euo pipefail
 source "$(dirname "$0")/helpers.sh"
 
 README="$PROJECT_DIR/README.md"
+CLI_README="$PROJECT_DIR/cli/README.md"
+SERVER_README="$PROJECT_DIR/server/README.md"
 VSCODE_README="$PROJECT_DIR/extension/README.md"
 OPENAPI="$PROJECT_DIR/server/openapi.yaml"
 PACKAGE_JSON="$PROJECT_DIR/extension/package.json"
@@ -23,14 +25,14 @@ for opt in $help_options; do
   case "$opt" in
     --help|--version) continue ;;
   esac
-  readme_content=$(cat "$README")
-  if echo "$readme_content" | grep -qF -- "$opt"; then
+  cli_readme_content=$(cat "$CLI_README")
+  if echo "$cli_readme_content" | grep -qF -- "$opt"; then
     PASS=$((PASS + 1))
-    printf "  ${GREEN}PASS${RESET} README mentions %s\n" "$opt"
+    printf "  ${GREEN}PASS${RESET} CLI README mentions %s\n" "$opt"
   else
     FAIL=$((FAIL + 1))
-    ERRORS="${ERRORS}\n  FAIL: README missing CLI option: $opt"
-    printf "  ${RED}FAIL${RESET} README missing CLI option: %s\n" "$opt"
+    ERRORS="${ERRORS}\n  FAIL: CLI README missing CLI option: $opt"
+    printf "  ${RED}FAIL${RESET} CLI README missing CLI option: %s\n" "$opt"
   fi
 done
 
@@ -41,7 +43,7 @@ for opt in $help_short_options; do
   case "$opt" in
     -h|-v) continue ;;
   esac
-  if echo "$readme_content" | grep -qF -- "$opt"; then
+  if echo "$cli_readme_content" | grep -qF -- "$opt"; then
     PASS=$((PASS + 1))
     printf "  ${GREEN}PASS${RESET} README mentions %s\n" "$opt"
   else
@@ -61,7 +63,7 @@ section "docs: no phantom CLI options in README"
 check_no_phantom() {
   local opt="$1"
   # Match --flag as a standalone word (not inside pandia-serve etc.)
-  if echo "$readme_content" | grep -qE "(^|[[:space:]])${opt}([[:space:]]|$)"; then
+  if echo "$cli_readme_content" | grep -qE "(^|[[:space:]])${opt}([[:space:]]|$)"; then
     FAIL=$((FAIL + 1))
     ERRORS="${ERRORS}\n  FAIL: README mentions removed option: $opt"
     printf "  ${RED}FAIL${RESET} README mentions removed option: %s\n" "$opt"
@@ -75,7 +77,7 @@ check_no_phantom "--docker"
 check_no_phantom "--local"
 
 # -t must not be described as "repeatable"
-if echo "$readme_content" | grep -qi "repeatable"; then
+if echo "$cli_readme_content" | grep -qi "repeatable"; then
   FAIL=$((FAIL + 1))
   ERRORS="${ERRORS}\n  FAIL: README still describes -t as repeatable"
   printf "  ${RED}FAIL${RESET} README still describes -t as repeatable\n"
@@ -93,19 +95,20 @@ if [[ -f "$OPENAPI" ]]; then
   # Extract paths from openapi.yaml
   api_paths=$(grep -E '^\s+/[a-z]' "$OPENAPI" | sed 's/[: ]//g' | sort -u)
 
+  server_readme_content=$(cat "$SERVER_README")
   for path in $api_paths; do
-    if echo "$readme_content" | grep -qF -- "$path"; then
+    if echo "$server_readme_content" | grep -qF -- "$path"; then
       PASS=$((PASS + 1))
-      printf "  ${GREEN}PASS${RESET} README documents API endpoint %s\n" "$path"
+      printf "  ${GREEN}PASS${RESET} Server README documents API endpoint %s\n" "$path"
     else
       FAIL=$((FAIL + 1))
-      ERRORS="${ERRORS}\n  FAIL: README missing API endpoint: $path"
-      printf "  ${RED}FAIL${RESET} README missing API endpoint: %s\n" "$path"
+      ERRORS="${ERRORS}\n  FAIL: Server README missing API endpoint: $path"
+      printf "  ${RED}FAIL${RESET} Server README missing API endpoint: %s\n" "$path"
     fi
   done
 
-  # README must not mention /preview (removed endpoint)
-  if echo "$readme_content" | grep -qF '/preview'; then
+  # Server README must not mention /preview (removed endpoint)
+  if echo "$server_readme_content" | grep -qF '/preview'; then
     FAIL=$((FAIL + 1))
     ERRORS="${ERRORS}\n  FAIL: README mentions removed /preview endpoint"
     printf "  ${RED}FAIL${RESET} README mentions removed /preview endpoint\n"
@@ -181,7 +184,7 @@ section "docs: diagram types in README"
 # Core types listed in --help
 help_types="plantuml graphviz mermaid markmap ditaa tikz nomnoml dbml d2 wavedrom dir"
 for dtype in $help_types; do
-  if echo "$readme_content" | grep -qiF "$dtype"; then
+  if grep -qiF "$dtype" "$README"; then
     PASS=$((PASS + 1))
     printf "  ${GREEN}PASS${RESET} README mentions diagram type: %s\n" "$dtype"
   else
