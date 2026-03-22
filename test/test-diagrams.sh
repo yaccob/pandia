@@ -474,6 +474,30 @@ test_markmap_whitespace_only() {
 }
 test_markmap_whitespace_only
 
+section "markmap: temp file cleanup"
+
+test_markmap_no_temp_files() {
+  local input='```markmap
+# Root
+## A
+## B
+```'
+  run_filter_isolated_keep "$input" >/dev/null
+  # After rendering, temp files markmap-N.md and markmap-N.html in img/ should be cleaned up
+  local leftover
+  leftover=$(find "$WORK_DIR/img" -name 'markmap-*' 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$leftover" -eq 0 ]]; then
+    PASS=$((PASS + 1))
+    printf "  ${GREEN}PASS${RESET} %s\n" "No markmap temp files left after rendering"
+  else
+    FAIL=$((FAIL + 1))
+    printf "  ${RED}FAIL${RESET} %s\n" "No markmap temp files left after rendering"
+    ERRORS="${ERRORS}\n  FAIL: Found $leftover markmap temp files in img/"
+  fi
+  teardown_workdir
+}
+test_markmap_no_temp_files
+
 section "markmap: PDF output"
 
 test_markmap_pdf() {

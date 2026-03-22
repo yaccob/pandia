@@ -180,6 +180,20 @@ else
   fail "/render rejects empty body (got $http_code)"
 fi
 
+# rendering error returns 500
+error_result=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:${PORT}/render?format=pdf" \
+  --data-binary '```plantuml
+@startuml
+INVALID SYNTAX !!!
+@enduml
+```' 2>&1) || true
+http_code=$(echo "$error_result" | tail -1)
+if [[ "$http_code" == "500" ]]; then
+  ok "/render returns 500 on rendering error"
+else
+  fail "/render returns 500 on rendering error (got $http_code)"
+fi
+
 # wrong method
 method_result=$(curl -s -w "\n%{http_code}" "http://localhost:${PORT}/render" 2>&1) || true
 http_code=$(echo "$method_result" | tail -1)

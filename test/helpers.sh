@@ -129,6 +129,14 @@ run_filter_isolated() {
   return $rc
 }
 
+# Run filter in isolated workdir and KEEP workdir for inspection.
+# Caller must call teardown_workdir when done.
+run_filter_isolated_keep() {
+  local input="$1"
+  setup_workdir
+  (cd "$WORK_DIR" && echo "$input" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html 2>/dev/null)
+}
+
 run_filter_isolated_stderr() {
   local input="$1"
   setup_workdir

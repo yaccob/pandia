@@ -112,12 +112,14 @@ test_cli_status_on_stderr() {
 test_cli_status_on_stderr
 
 test_cli_stdout_html_without_output_flag() {
-  local tmpdir stdout stderr_file
+  local tmpdir stdout stderr_file stderr
   tmpdir=$(mktemp -d)
   echo '# Hello' > "$tmpdir/input.md"
   stderr_file="$tmpdir/stderr"
   stdout=$("$PANDIA" -t html "$tmpdir/input.md" 2>"$stderr_file") || true
+  stderr=$(cat "$stderr_file")
   assert_contains "$stdout" "<h1" "HTML content appears on stdout without -o"
+  assert_contains "$stderr" "Generating" "Status on stderr in stdout mode"
   rm -rf "$tmpdir"
 }
 test_cli_stdout_html_without_output_flag
