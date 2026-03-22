@@ -2,8 +2,9 @@
 # Mutation testing — apply random mutations to source files, run tests,
 # and report which mutations survive (= test gaps).
 #
-# Usage: bash test/mutate.sh [ROUNDS]
-#   ROUNDS  Number of mutation attempts (default: 50)
+# Usage: bash test/mutate.sh [ROUNDS] [TEST_TARGET]
+#   ROUNDS       Number of mutation attempts (default: 100)
+#   TEST_TARGET  Make target to run (default: test-quick)
 #
 # Each round:
 #   1. Pick a random source file
@@ -20,7 +21,8 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-ROUNDS="${1:-50}"
+ROUNDS="${1:-100}"
+TEST_TARGET="${2:-test-quick}"
 
 # --- Mutable source files and their syntax checkers ---
 
@@ -121,7 +123,7 @@ else
   GREEN=''; RED=''; YELLOW=''; BOLD=''; RESET=''
 fi
 
-printf "${BOLD}Mutation testing: %d rounds${RESET}\n\n" "$ROUNDS"
+printf "${BOLD}Mutation testing: %d rounds (target: %s)${RESET}\n\n" "$ROUNDS" "$TEST_TARGET"
 
 for (( i=1; i<=ROUNDS; i++ )); do
   # Pick random file
@@ -166,7 +168,7 @@ for (( i=1; i<=ROUNDS; i++ )); do
 
   # Run tests
   printf "  [%d/%d] %s:%d ... " "$i" "$ROUNDS" "$file" "$line_num"
-  if make test-quick >/dev/null 2>&1; then
+  if make "$TEST_TARGET" >/dev/null 2>&1; then
     # Tests passed — mutant survived!
     SURVIVED=$((SURVIVED + 1))
     printf "${RED}SURVIVED${RESET}\n"
