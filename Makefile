@@ -11,7 +11,7 @@ TEST_CONTAINER := pandia-test-all
 
 PANDOC_COMMON := --lua-filter=$(FILTER) --from=gfm+tex_math_dollars
 
-.PHONY: all pdf html clean test test-quick test-all test-container vscode-ext vscode-install docker-pdf docker-html docker-all docker-build docker-push docker-test
+.PHONY: all pdf html clean test test-quick test-all test-container vscode-ext vscode-install docker-pdf docker-html docker-build docker-push docker-test mutate
 
 # --- Local targets (require pandoc + tools installed) ---
 
@@ -52,6 +52,11 @@ test-quick:
 	bash test/test-robustness.sh
 	bash test/test-cli.sh
 	bash test/test-docs.sh
+
+# --- Mutation testing ---
+
+mutate:
+	@bash test/mutate.sh $(MUTATE_ROUNDS)
 
 # --- Full pre-commit test suite ---
 
