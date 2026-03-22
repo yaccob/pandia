@@ -74,17 +74,22 @@ test-container: docker-build
 	@printf "\n\033[1m=== Container tests (pure image) ===\033[0m\n"
 	@bash test/test-container.sh $(TEST_PORT)
 
-test-vscode:
+VSCODE_SRC := $(wildcard pandia-vscode/src/*.ts) pandia-vscode/package.json pandia-vscode/tsconfig.json
+VSIX       := pandia-vscode/pandia-preview-0.1.0.vsix
+
+test-vscode: vscode-install
 	@printf "\n\033[1m=== VS Code extension ===\033[0m\n"
-	cd "$(CURDIR)/pandia-vscode" && npx tsc && node --test test/*.test.mjs
+	cd "$(CURDIR)/pandia-vscode" && node --test test/*.test.mjs
 
 # --- VS Code extension ---
 
-vscode-ext:
-	cd pandia-vscode && npm install && npx tsc && npx @vscode/vsce package --allow-missing-repository
+$(VSIX): $(VSCODE_SRC)
+	cd "$(CURDIR)/pandia-vscode" && npm install && npx tsc && npx @vscode/vsce package --allow-missing-repository
 
-vscode-install: vscode-ext
-	code --install-extension pandia-vscode/pandia-preview-*.vsix
+vscode-ext: $(VSIX)
+
+vscode-install: $(VSIX)
+	code --install-extension $(VSIX)
 
 # --- Docker targets ---
 

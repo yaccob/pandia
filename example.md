@@ -24,7 +24,7 @@ explicitly with a trailing `/`. They are rendered in **bold**.
 ```dir
 pandia
   bin
-    pandia
+      pandia
   diagram-filter.lua
   Dockerfile
   entrypoint.sh
