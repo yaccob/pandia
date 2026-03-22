@@ -3,5 +3,6 @@ img/
 *.html
 .docker-test/
 .brew-test/
-.claude/
+.claude/settings.local.json
+.claude/projects/
 .vscode/
