@@ -8,7 +8,7 @@
 //     Body: Markdown content (plain text)
 //     Query parameters:
 //       format        — html (default) or pdf
-//       math          — mathjax (default) or mathml
+//       math          — mathml (default) or mathjax
 //       maxwidth      — max content width for HTML (default: 60em)
 //       center_math   — true to center display math (default: left-aligned)
 //       kroki_server  — Kroki server URL for additional diagram types
@@ -52,7 +52,7 @@ function readRawBody (req) {
   })
 }
 
-async function render (content, { format = 'html', math = 'mathjax', maxwidth = '60em', center_math = false, kroki_server } = {}) {
+async function render (content, { format = 'html', math = 'mathml', maxwidth = '60em', center_math = false, kroki_server } = {}) {
   const id = randomBytes(6).toString('hex')
   const workdir = join(tmpdir(), `pandia-render-${id}`)
   mkdirSync(workdir, { recursive: true })
@@ -79,12 +79,15 @@ async function render (content, { format = 'html', math = 'mathjax', maxwidth = 
 
   // HTML
   const outfile = join(workdir, 'output.html')
-  if (math === 'mathml') {
-    cmd += ` --to=html5 --mathml`
-  } else {
-    cmd += ` --to=html5 --mathjax`
+  if (math === 'mathjax') {
+    cmd += ` --to=html5 --mathjax=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js`
     if (!center_math) {
       cmd += ` -V "header-includes=<script>window.MathJax={chtml:{displayAlign:'left'}};</script>"`
+    }
+  } else {
+    cmd += ` --to=html5 --mathml`
+    if (!center_math) {
+      cmd += ` -V "header-includes=<style>math[display=block]{display:block!important;text-align:left!important}</style>"`
     }
   }
   cmd += ` -V maxwidth="${maxwidth}"`
@@ -120,7 +123,7 @@ const server = createServer(async (req, res) => {
 
       const opts = {
         format,
-        math: url.searchParams.get('math') || 'mathjax',
+        math: url.searchParams.get('math') || 'mathml',
         maxwidth: url.searchParams.get('maxwidth') || '60em',
         center_math: url.searchParams.get('center_math') === 'true',
         kroki_server: url.searchParams.get('kroki_server') || undefined,

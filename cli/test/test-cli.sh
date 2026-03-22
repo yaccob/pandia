@@ -237,7 +237,7 @@ test_cli_center_math_html() {
   printf '# Math\n\n$$x^2$$\n' > "$tmpdir/input.md"
   stderr_file="$tmpdir/stderr"
   stdout=$("$PANDIA" -t html --center-math "$tmpdir/input.md" 2>"$stderr_file") || true
-  assert_not_contains "$stdout" "displayAlign" "--center-math omits left-align MathJax config"
+  assert_not_contains "$stdout" "text-align:left" "--center-math omits left-align CSS"
   rm -rf "$tmpdir"
 }
 test_cli_center_math_html
@@ -248,10 +248,39 @@ test_cli_default_left_align_math() {
   printf '# Math\n\n$$x^2$$\n' > "$tmpdir/input.md"
   stderr_file="$tmpdir/stderr"
   stdout=$("$PANDIA" -t html "$tmpdir/input.md" 2>"$stderr_file") || true
-  assert_contains "$stdout" "displayAlign" "Default math is left-aligned (MathJax displayAlign)"
+  assert_contains "$stdout" "text-align:left" "Default math is left-aligned (CSS)"
   rm -rf "$tmpdir"
 }
 test_cli_default_left_align_math
+
+test_cli_default_math_is_mathml() {
+  local tmpdir stdout stderr_file
+  tmpdir=$(mktemp -d)
+  printf '# Math\n\n$$x^2$$\n' > "$tmpdir/input.md"
+  stderr_file="$tmpdir/stderr"
+  stdout=$("$PANDIA" -t html "$tmpdir/input.md" 2>"$stderr_file") || true
+  assert_contains "$stdout" "<math" "Default math engine is MathML (not MathJax)"
+  rm -rf "$tmpdir"
+}
+test_cli_default_math_is_mathml
+
+test_cli_mathml_left_aligned() {
+  local tmpdir stdout stderr_file
+  tmpdir=$(mktemp -d)
+  printf '# Math\n\n$$x^2$$\n' > "$tmpdir/input.md"
+  stderr_file="$tmpdir/stderr"
+  stdout=$("$PANDIA" -t html "$tmpdir/input.md" 2>"$stderr_file") || true
+  if echo "$stdout" | grep -q 'math.*text-align.*left\|display.*block.*text-align.*left'; then
+    PASS=$((PASS + 1))
+    printf "  ${GREEN}PASS${RESET} MathML display math has CSS left-alignment\n"
+  else
+    FAIL=$((FAIL + 1))
+    ERRORS="${ERRORS}\n  FAIL: MathML display math has CSS left-alignment"
+    printf "  ${RED}FAIL${RESET} MathML display math has CSS left-alignment\n"
+  fi
+  rm -rf "$tmpdir"
+}
+test_cli_mathml_left_aligned
 
 section "cli: --kroki-server option"
 

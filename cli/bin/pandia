@@ -168,13 +168,15 @@ run_local() {
   fi
 
   MATH_FLAGS=""
+  MATH_ENGINE="--mathml"
   if [ "$FORMAT" = pdf ]; then
+    MATH_ENGINE=""  # PDF uses LaTeX natively
     if [ "$CENTER_MATH" = false ]; then
       MATH_FLAGS="-V classoption=fleqn"
     fi
   else
     if [ "$CENTER_MATH" = false ]; then
-      MATH_FLAGS="-V header-includes=<script>window.MathJax={chtml:{displayAlign:'left'}};</script>"
+      MATH_FLAGS="-V header-includes=<style>math[display=block]{display:block!important;text-align:left!important}</style>"
     fi
   fi
 
@@ -192,7 +194,7 @@ run_local() {
       pandoc $PANDOC_COMMON \
         --to=html5 \
         --standalone \
-        --mathjax \
+        $MATH_ENGINE \
         -V maxwidth="$MAXWIDTH" \
         $MATH_FLAGS \
         -o "$OUTPUT_FILE" "$INPUT"
@@ -212,7 +214,7 @@ run_local() {
       pandoc $PANDOC_COMMON \
         --to=html5 \
         --standalone \
-        --mathjax \
+        $MATH_ENGINE \
         -V maxwidth="$MAXWIDTH" \
         $MATH_FLAGS \
         "$INPUT"

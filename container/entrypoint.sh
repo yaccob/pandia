@@ -105,13 +105,15 @@ if [ -f "$MERMAID_SERVER_SCRIPT" ]; then
 fi
 
 MATH_FLAGS=""
+MATH_ENGINE="--mathml"
 if [ "$FORMAT" = pdf ]; then
+  MATH_ENGINE=""
   if [ "$CENTER_MATH" = false ]; then
     MATH_FLAGS="-V classoption=fleqn"
   fi
 else
   if [ "$CENTER_MATH" = false ]; then
-    MATH_FLAGS="-V header-includes=<script>window.MathJax={chtml:{displayAlign:'left'}};</script>"
+    MATH_FLAGS="-V header-includes=<style>math[display=block]{display:block!important;text-align:left!important}</style>"
   fi
 fi
 
@@ -125,7 +127,7 @@ if [ -n "$OUTPUT_FILE" ]; then
       -o "$OUTPUT_FILE" "$INPUT"
   else
     pandoc $PANDOC_COMMON \
-      --to=html5 --standalone --embed-resources --mathjax \
+      --to=html5 --standalone --embed-resources $MATH_ENGINE \
       -V maxwidth="$MAXWIDTH" $MATH_FLAGS \
       -o "$OUTPUT_FILE" "$INPUT"
   fi
@@ -140,7 +142,7 @@ else
       "$INPUT"
   else
     pandoc $PANDOC_COMMON \
-      --to=html5 --standalone --embed-resources --mathjax \
+      --to=html5 --standalone --embed-resources $MATH_ENGINE \
       -V maxwidth="$MAXWIDTH" $MATH_FLAGS \
       "$INPUT"
   fi

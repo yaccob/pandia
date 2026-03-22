@@ -51,13 +51,12 @@ paths:
           in: query
           required: false
           description: |
-            Math rendering engine. `mathjax` embeds MathJax JavaScript
-            (requires browser/CDN). `mathml` renders math as MathML
-            (no JavaScript needed, works in VS Code webviews).
+            Math rendering engine. `mathml` renders math as native MathML
+            (no JavaScript needed). `mathjax` loads MathJax from CDN.
           schema:
             type: string
-            enum: [mathjax, mathml]
-            default: mathjax
+            enum: [mathml, mathjax]
+            default: mathml
         - name: maxwidth
           in: query
           required: false

@@ -44,11 +44,6 @@ export function patchHtmlForWebview(html: string): string {
     .markmap-container svg {
       height: 100% !important;
     }
-    /* Left-align display math (MathML block math is centered by default) */
-    math[display="block"] {
-      display: block !important;
-      text-align: left !important;
-    }
   </style>`;
 
   // Inject our theme CSS just before </head>

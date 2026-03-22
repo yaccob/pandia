@@ -131,25 +131,51 @@ else
   fail "/render math=mathml produces MathML"
 fi
 
-# math=mathjax (default) with left-aligned
+# default math (mathml) with left-aligned CSS
 curl -s -X POST "http://localhost:${PORT}/render" \
   --data-binary 'Math: $$x^2$$' > /tmp/pandia-test-math.html 2>&1 || true
-if grep -q "MathJax={chtml:{displayAlign:'left'}}" /tmp/pandia-test-math.html 2>/dev/null; then
-  ok "/render default math is left-aligned (MathJax config)"
+if grep -q 'text-align.*left' /tmp/pandia-test-math.html 2>/dev/null; then
+  ok "/render default math is left-aligned (CSS)"
 else
   fail "/render default math is left-aligned"
 fi
 
-# center_math
+# center_math must not inject left-align CSS
 curl -s -X POST "http://localhost:${PORT}/render?center_math=true" \
   --data-binary 'Math: $$x^2$$' > /tmp/pandia-test-math-center.html 2>&1 || true
-# Our config script sets displayAlign:'left' — it must NOT be present when centering
-if grep -q "MathJax={chtml:{displayAlign:'left'}}" /tmp/pandia-test-math-center.html 2>/dev/null; then
-  fail "/render center_math=true must not inject left-align config"
+if grep -q 'math.*text-align.*left' /tmp/pandia-test-math-center.html 2>/dev/null; then
+  fail "/render center_math=true must not inject left-align CSS"
 else
-  ok "/render center_math=true does not inject left-align config"
+  ok "/render center_math=true does not inject left-align CSS"
 fi
 rm -f /tmp/pandia-test-math.html /tmp/pandia-test-math-center.html
+
+# default math engine should be mathml
+default_math_result=$(curl -s -X POST "http://localhost:${PORT}/render" \
+  --data-binary 'Math: $$x^2$$' 2>&1) || true
+if echo "$default_math_result" | grep -q '<math'; then
+  ok "/render default math engine is MathML"
+else
+  fail "/render default math engine is MathML (got MathJax)"
+fi
+
+# mathml must have left-alignment CSS
+mathml_align_result=$(curl -s -X POST "http://localhost:${PORT}/render?math=mathml" \
+  --data-binary 'Math: $$x^2$$' 2>&1) || true
+if echo "$mathml_align_result" | grep -q 'math.*text-align.*left\|display.*block.*text-align.*left'; then
+  ok "/render MathML has CSS left-alignment"
+else
+  fail "/render MathML has CSS left-alignment"
+fi
+
+# mathjax must not contain %%URL%% font placeholders
+mathjax_fonts_result=$(curl -s -X POST "http://localhost:${PORT}/render?math=mathjax" \
+  --data-binary 'Math: $$x^2$$' 2>&1) || true
+if echo "$mathjax_fonts_result" | grep -q '%%URL%%'; then
+  fail "/render MathJax fonts must not contain %%URL%% placeholders"
+else
+  ok "/render MathJax fonts are loadable (no %%URL%% placeholders)"
+fi
 
 # maxwidth
 mw_result=$(curl -s -X POST "http://localhost:${PORT}/render?maxwidth=40em" \
@@ -188,6 +214,7 @@ if [[ "$http_code" == "405" ]]; then
 else
   fail "/render GET returns 405 (got $http_code)"
 fi
+
 
 # --- Cleanup ---
 $RT stop "$CONTAINER" >/dev/null 2>&1 || true
