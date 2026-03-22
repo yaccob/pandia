@@ -57,6 +57,7 @@ test-quick:
 	bash server/test/test-robustness.sh
 	bash cli/test/test-cli.sh
 	bash test/test-docs.sh
+	bash server/test/test-math-visual.sh
 
 # --- Mutation testing ---
 
