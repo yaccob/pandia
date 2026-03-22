@@ -13,9 +13,11 @@ Live preview for Markdown documents with embedded diagrams and LaTeX math.
 
 ## Prerequisites
 
-- **Docker** or **Podman** — the extension uses a pandia container for rendering
+A running pandia server. Start one with Docker/Podman:
 
-That's it. No local tool installation needed.
+```bash
+docker run -d -p 3300:3300 yaccob/pandia pandia-serve 3300
+```
 
 ## Getting Started
 
@@ -25,35 +27,27 @@ That's it. No local tool installation needed.
    make vscode-install
    ```
 
-2. Open a Markdown file
+2. Configure the server URL in VS Code settings:
+   ```json
+   {
+     "pandia.serverUrl": "http://localhost:3300"
+   }
+   ```
 
-3. **Cmd+Shift+P** → **Pandia: Open Preview**
+3. Open a Markdown file
 
-The extension automatically starts a pandia container if no server is running.
+4. **Cmd+Shift+P** → **Pandia: Open Preview**
 
 ## Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `pandia.serverUrl` | *(empty)* | URL of a running pandia server. If empty, a container is started automatically. |
-| `pandia.containerImage` | `yaccob/pandia:latest` | Docker/Podman image to use. |
-| `pandia.port` | `3300` | Port for the pandia server. |
-| `pandia.krokiServer` | *(empty)* | Kroki server URL for additional diagram types (BPMN, ERD, Pikchr, etc.). Example: `https://kroki.io` |
-
-### Using an existing server
-
-If you already have a pandia server running (e.g. on a remote machine):
-
-```json
-{
-  "pandia.serverUrl": "http://my-server:3300"
-}
-```
+| `pandia.serverUrl` | *(empty)* | URL of a running pandia server (e.g. `http://localhost:3300`). |
 
 ## How It Works
 
 ```
-VS Code                          pandia container
+VS Code                          pandia server
 ┌─────────────┐                 ┌──────────────────┐
 │ Editor      │                 │ POST /render      │
 │ (Markdown)  │── HTTP POST ──→│ pandoc + filter   │

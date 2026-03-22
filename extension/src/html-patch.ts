@@ -44,6 +44,17 @@ export function patchHtmlForWebview(html: string): string {
     .markmap-container svg {
       height: 100% !important;
     }
+    /* Left-align display math (MathML block math is centered by default) */
+    math[display="block"] {
+      display: block !important;
+      text-align: left !important;
+    }
+    /* Use proper math fonts for MathML rendering */
+    math, math * {
+      font-family: "STIX Two Math", "STIX Two Text", STIXGeneral, "Cambria Math",
+                   "Latin Modern Math", "Asana Math", "DejaVu Math TeX Gyre",
+                   "XITS Math", serif !important;
+    }
   </style>`;
 
   // Inject our theme CSS just before </head>

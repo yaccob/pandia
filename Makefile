@@ -11,7 +11,15 @@ TEST_CONTAINER := pandia-test-all
 
 PANDOC_COMMON := --lua-filter=$(FILTER) --from=gfm+tex_math_dollars
 
-.PHONY: all pdf html clean test-quick test-all test-container vscode-ext vscode-install docker-pdf docker-html docker-build docker-push mutate mutate-full
+.PHONY: all build pdf html clean test-quick test-all test-container vscode-ext vscode-install docker-pdf docker-html docker-build docker-push mutate mutate-full
+
+# --- Build everything ---
+
+build: docker-build vscode-install
+	@running=$$($(CONTAINER_RT) ps --filter ancestor=$(IMAGE):latest --format '{{.Names}}' 2>/dev/null); \
+	 if [ -n "$$running" ]; then \
+	   printf "\n\033[1;33mWARNING: Container '$$running' is still running with the old image. Restart it to use the new build.\033[0m\n"; \
+	 fi
 
 # --- Local targets (require pandoc + tools installed) ---
 

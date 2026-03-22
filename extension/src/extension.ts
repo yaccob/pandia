@@ -1,63 +1,30 @@
 import * as vscode from 'vscode';
 import { PandiaClient } from './client';
-import { ContainerManager } from './container';
 import { patchHtmlForWebview } from './html-patch';
 
 let previewPanel: vscode.WebviewPanel | undefined;
 let client: PandiaClient | undefined;
-let containerManager: ContainerManager | undefined;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-async function ensureServer(): Promise<PandiaClient> {
+function getServerUrl(): string {
   const config = vscode.workspace.getConfiguration('pandia');
-  const serverUrl = config.get<string>('serverUrl');
-  const port = config.get<number>('port') || 3300;
-
-  // If user configured a server URL, use it
-  if (serverUrl) {
-    const c = new PandiaClient(serverUrl);
-    if (await c.checkHealth()) {
-      return c;
-    }
-    throw new Error(`Pandia server at ${serverUrl} is not responding.`);
+  const url = config.get<string>('serverUrl');
+  if (!url) {
+    throw new Error(
+      'No pandia server URL configured.\n'
+      + 'Set "pandia.serverUrl" in your VS Code settings (e.g. http://localhost:3300).'
+    );
   }
+  return url;
+}
 
-  // Try default local URL
-  const defaultUrl = `http://localhost:${port}`;
-  const c = new PandiaClient(defaultUrl);
+async function ensureServer(): Promise<PandiaClient> {
+  const url = getServerUrl();
+  const c = new PandiaClient(url);
   if (await c.checkHealth()) {
     return c;
   }
-
-  // No server running — start a container
-  const image = config.get<string>('containerImage') || 'yaccob/pandia:latest';
-  containerManager = new ContainerManager({ image, port });
-
-  const runtime = containerManager.detectRuntime();
-  if (!runtime) {
-    throw new Error(
-      'No pandia server found and no container runtime (Docker/Podman) available.\n'
-      + 'Either start a pandia server manually or install Docker/Podman.'
-    );
-  }
-
-  const statusMsg = vscode.window.setStatusBarMessage('$(loading~spin) Starting pandia server...');
-  try {
-    await containerManager.start();
-
-    // Wait for server to become ready (up to 30s)
-    for (let i = 0; i < 60; i++) {
-      if (await c.checkHealth()) {
-        statusMsg.dispose();
-        return c;
-      }
-      await new Promise(r => setTimeout(r, 500));
-    }
-    throw new Error('Pandia server did not become ready within 30 seconds.');
-  } catch (e) {
-    statusMsg.dispose();
-    throw e;
-  }
+  throw new Error(`Pandia server at ${url} is not responding.`);
 }
 
 async function updatePreview(document: vscode.TextDocument) {
@@ -65,11 +32,8 @@ async function updatePreview(document: vscode.TextDocument) {
   if (document.languageId !== 'markdown') return;
 
   try {
-    const config = vscode.workspace.getConfiguration('pandia');
-    const krokiServer = config.get<string>('krokiServer');
     const html = await client.render(document.getText(), {
       math: 'mathml',
-      kroki_server: krokiServer || undefined,
     });
     if (previewPanel) {
       previewPanel.webview.html = patchHtmlForWebview(html);
@@ -148,7 +112,4 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
   if (debounceTimer) clearTimeout(debounceTimer);
-  if (containerManager) {
-    containerManager.stop().catch(() => {});
-  }
 }

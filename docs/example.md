@@ -24,7 +24,7 @@ explicitly with a trailing `/`. They are rendered in **bold**.
 ```dir
 pandia
   bin
-      pandia
+    pandia
   diagram-filter.lua
   Dockerfile
   entrypoint.sh
@@ -629,10 +629,10 @@ Deriving it by completing the square:
 
 $$
 \begin{alignedat}{2}
-  ax^2 + bx + c &= 0           &\quad&| \div a \\
-  x^2 + \frac{b}{a}x &= -\frac{c}{a} &&| + \left(\frac{b}{2a}\right)^2 \\
-  \left(x + \frac{b}{2a}\right)^2 &= \frac{b^2 - 4ac}{4a^2} &&| \sqrt{\phantom{x}} \\
-  x + \frac{b}{2a} &= \pm\frac{\sqrt{b^2 - 4ac}}{2a} &&| - \frac{b}{2a} \\
+  ax^2 + bx + c &= 0           &\quad&|\; \div a \\
+  x^2 + \frac{b}{a}x &= -\frac{c}{a} &&|\; + \left(\frac{b}{2a}\right)^2 \\
+  \left(x + \frac{b}{2a}\right)^2 &= \frac{b^2 - 4ac}{4a^2} &&|\; \sqrt{\phantom{x}} \\
+  x + \frac{b}{2a} &= \pm\frac{\sqrt{b^2 - 4ac}}{2a} &&|\; - \frac{b}{2a} \\
   x &= \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
 \end{alignedat}
 $$

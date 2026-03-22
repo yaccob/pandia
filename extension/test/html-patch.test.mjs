@@ -44,13 +44,13 @@ describe('patchHtmlForWebview', () => {
       'must use VS Code background variable')
   })
 
-  it('does not inject math alignment (server provides it)', () => {
+  it('left-aligns MathML display math', () => {
     const mathHtml = `<html><head></head><body>
       <math display="block"><mrow><mi>x</mi></mrow></math>
     </body></html>`
     const result = patchHtmlForWebview(mathHtml)
-    assert.doesNotMatch(result, /math\[display="block"\][^}]*text-align/s,
-      'webview patch must not override server-provided math alignment')
+    assert.match(result, /math\[display="block"\][^}]*text-align:\s*left/s,
+      'webview patch must left-align MathML display math')
   })
 
   it('does not override height of markmap SVGs', () => {

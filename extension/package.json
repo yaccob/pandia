@@ -25,22 +25,7 @@
         "pandia.serverUrl": {
           "type": "string",
           "default": "",
-          "description": "URL of a running pandia server (e.g. http://localhost:3300). If empty, a container is started automatically."
-        },
-        "pandia.containerImage": {
-          "type": "string",
-          "default": "yaccob/pandia:latest",
-          "description": "Docker/Podman image to use for the pandia server."
-        },
-        "pandia.port": {
-          "type": "number",
-          "default": 3300,
-          "description": "Port for the pandia server."
-        },
-        "pandia.krokiServer": {
-          "type": "string",
-          "default": "",
-          "description": "Kroki server URL for additional diagram types (BPMN, ERD, Pikchr, etc.). Example: https://kroki.io"
+          "description": "URL of a running pandia server (e.g. http://localhost:3300)."
         }
       }
     }
