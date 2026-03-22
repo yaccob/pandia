@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(dirname "$0")/helpers.sh"
+source "$(dirname "$0")/../../test/helpers.sh"
 
 if [[ -z "$CONTAINER_RT" ]]; then
   printf "\n${BOLD}cli: --serve mode${RESET}\n"
@@ -23,10 +23,10 @@ start_serve() {
   $CONTAINER_RT run --rm -d --name "$SERVE_CONTAINER" \
     -p "${SERVE_PORT}:${SERVE_PORT}" \
     -v "$SERVE_TMPDIR:/data" \
-    -v "$PROJECT_DIR/pandia-server.mjs:/usr/local/share/pandia/pandia-server.mjs:ro" \
-    -v "$PROJECT_DIR/diagram-filter.lua:/usr/local/share/pandoc/filters/diagram-filter.lua:ro" \
-    -v "$PROJECT_DIR/markmap-render.mjs:/usr/local/share/pandia/markmap-render.mjs:ro" \
-    -v "$PROJECT_DIR/diagram-renderer.mjs:/usr/local/lib/node_modules/diagram-renderer.mjs:ro" \
+    -v "$PROJECT_DIR/server/pandia-server.mjs:/usr/local/share/pandia/pandia-server.mjs:ro" \
+    -v "$PROJECT_DIR/server/diagram-filter.lua:/usr/local/share/pandoc/filters/diagram-filter.lua:ro" \
+    -v "$PROJECT_DIR/server/markmap-render.mjs:/usr/local/share/pandia/markmap-render.mjs:ro" \
+    -v "$PROJECT_DIR/server/diagram-renderer.mjs:/usr/local/lib/node_modules/diagram-renderer.mjs:ro" \
     yaccob/pandia --serve "$SERVE_PORT" >/dev/null 2>&1
 
   local i=0

@@ -28,14 +28,14 @@ TEST_TARGET="${2:-test-quick}"
 
 # file:checker pairs — checker must exit 0 for valid syntax
 declare -A SYNTAX_CHECK
-SYNTAX_CHECK["bin/pandia"]="sh -n"
-SYNTAX_CHECK["bin/pandia-serve"]="sh -n"
-SYNTAX_CHECK["entrypoint.sh"]="sh -n"
-SYNTAX_CHECK["diagram-filter.lua"]="luac -p"
-SYNTAX_CHECK["pandia-server.mjs"]="node --check"
-SYNTAX_CHECK["diagram-renderer.mjs"]="node --check"
-SYNTAX_CHECK["markmap-render.mjs"]="node --check"
-SYNTAX_CHECK["mermaid-server.mjs"]="node --check"
+SYNTAX_CHECK["cli/bin/pandia"]="sh -n"
+SYNTAX_CHECK["cli/bin/pandia-serve"]="sh -n"
+SYNTAX_CHECK["container/entrypoint.sh"]="sh -n"
+SYNTAX_CHECK["server/diagram-filter.lua"]="luac -p"
+SYNTAX_CHECK["server/pandia-server.mjs"]="node --check"
+SYNTAX_CHECK["server/diagram-renderer.mjs"]="node --check"
+SYNTAX_CHECK["server/markmap-render.mjs"]="node --check"
+SYNTAX_CHECK["server/mermaid-server.mjs"]="node --check"
 
 FILES=("${!SYNTAX_CHECK[@]}")
 

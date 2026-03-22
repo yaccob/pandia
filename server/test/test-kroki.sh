@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(dirname "$0")/helpers.sh"
+source "$(dirname "$0")/../../test/helpers.sh"
 
 KROKI_AVAILABLE=false
 if curl -sf --max-time 5 "https://kroki.io/health" >/dev/null 2>&1; then

@@ -1,10 +1,12 @@
 img/
 *.pdf
 *.html
-*.md
-!example.md
+docs/
+extension/
+test/
+.git/
+.gitignore
+.claude/
 LICENSE
 README.md
 Makefile
-.git/
-.gitignore

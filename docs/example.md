@@ -48,6 +48,45 @@ pandia
   .gitignore
 ```
 
+## PlantUML Salt
+```plantuml
+@startsalt
+{
+  {T
+    + $project_root
+    ++ bin
+    ++++ pandia
+    ++ diagram-filter.lua
+    ++ Dockerfile
+    ++ entrypoint.sh
+    ++ example.md
+    ++ img/
+    ++ Makefile
+    ++ README.md
+    ++ src
+    +++ core
+    ++++ engine.lua
+    ++++ parser.lua
+    +++ utils
+    ++++ helpers.lua
+    ++++ io
+    +++++ reader.lua
+    +++++ writer.lua
+    +++ init.lua
+    ++ tests
+    +++ test_engine.lua
+    ++ empty-dir/
+    ++ .gitignore
+  }
+}
+@endsalt
+```
+
+## PlantUML - OpenIconic
+```plantuml
+listopeniconic
+```
+
 ## PlantUML – Sequence Diagram
 
 ```plantuml

@@ -8,7 +8,7 @@ FILTER_NAME="diagram-filter.lua"
 find_filter() {
   for dir in \
     "$(dirname "$0")/../share/pandia" \
-    "$(dirname "$0")/.." \
+    "$(dirname "$0")/../../server" \
     "/usr/local/share/pandia" \
     "/opt/homebrew/share/pandia" \
     "$HOME/.local/share/pandia"

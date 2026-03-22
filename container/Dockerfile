@@ -56,23 +56,23 @@ RUN ARCH=$(uname -m | sed 's/aarch64/arm64/;s/x86_64/amd64/') && \
     rm -rf /tmp/d2*
 
 # Install the Lua filter
-COPY diagram-filter.lua /usr/local/share/pandoc/filters/diagram-filter.lua
+COPY server/diagram-filter.lua /usr/local/share/pandoc/filters/diagram-filter.lua
 
 # Mermaid render server (placed inside mermaid-cli for correct import resolution)
-COPY mermaid-server.mjs /usr/local/lib/node_modules/@mermaid-js/mermaid-cli/mermaid-server.mjs
+COPY server/mermaid-server.mjs /usr/local/lib/node_modules/@mermaid-js/mermaid-cli/mermaid-server.mjs
 
 # Markmap renderer and generic diagram renderer
-COPY markmap-render.mjs /usr/local/share/pandia/markmap-render.mjs
-COPY diagram-renderer.mjs /usr/local/lib/node_modules/diagram-renderer.mjs
+COPY server/markmap-render.mjs /usr/local/share/pandia/markmap-render.mjs
+COPY server/diagram-renderer.mjs /usr/local/lib/node_modules/diagram-renderer.mjs
 
 # Pandia HTTP server and CLI
-COPY pandia-server.mjs /usr/local/share/pandia/pandia-server.mjs
-COPY bin/pandia-serve /usr/local/bin/pandia-serve
-COPY bin/pandia /usr/local/bin/pandia
+COPY server/pandia-server.mjs /usr/local/share/pandia/pandia-server.mjs
+COPY cli/bin/pandia-serve /usr/local/bin/pandia-serve
+COPY cli/bin/pandia /usr/local/bin/pandia
 
 WORKDIR /data
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY container/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/pandia-serve /usr/local/bin/pandia
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

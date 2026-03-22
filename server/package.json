@@ -1,0 +1,11 @@
+{
+  "name": "pandia-server",
+  "version": "1.7.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@softwaretechnik/dbml-renderer": "*",
+    "nomnoml": "*",
+    "wavedrom": "*"
+  }
+}

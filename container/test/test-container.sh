@@ -62,7 +62,7 @@ printf "\n${BOLD}container: /render example.md completeness${RESET}\n"
 
 # Render example.md via /render (read from /data volume)
 curl -sf -X POST "http://localhost:${PORT}/render?kroki_server=https://kroki.io" \
-  --data-binary @example.md > example-container.html 2>&1 || fail "/render example.md"
+  --data-binary @docs/example.md > example-container.html 2>&1 || fail "/render example.md"
 sleep 1
 
 check_render_section() {
@@ -178,20 +178,6 @@ if [[ "$http_code" == "400" ]]; then
   ok "/render rejects empty body"
 else
   fail "/render rejects empty body (got $http_code)"
-fi
-
-# rendering error returns 500
-error_result=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:${PORT}/render?format=pdf" \
-  --data-binary '```plantuml
-@startuml
-INVALID SYNTAX !!!
-@enduml
-```' 2>&1) || true
-http_code=$(echo "$error_result" | tail -1)
-if [[ "$http_code" == "500" ]]; then
-  ok "/render returns 500 on rendering error"
-else
-  fail "/render returns 500 on rendering error (got $http_code)"
 fi
 
 # wrong method

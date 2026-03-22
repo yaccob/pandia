@@ -6,8 +6,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-FILTER="${PANDIA_TEST_FILTER:-$PROJECT_DIR/diagram-filter.lua}"
-PANDIA="$PROJECT_DIR/bin/pandia"
+FILTER="${PANDIA_TEST_FILTER:-$PROJECT_DIR/server/diagram-filter.lua}"
+PANDIA="$PROJECT_DIR/cli/bin/pandia"
 
 if [[ ! -f "$FILTER" ]]; then
   echo "ERROR: Filter not found: $FILTER" >&2

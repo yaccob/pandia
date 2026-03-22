@@ -4,9 +4,9 @@ set -euo pipefail
 source "$(dirname "$0")/helpers.sh"
 
 README="$PROJECT_DIR/README.md"
-VSCODE_README="$PROJECT_DIR/pandia-vscode/README.md"
-OPENAPI="$PROJECT_DIR/openapi.yaml"
-PACKAGE_JSON="$PROJECT_DIR/pandia-vscode/package.json"
+VSCODE_README="$PROJECT_DIR/extension/README.md"
+OPENAPI="$PROJECT_DIR/server/openapi.yaml"
+PACKAGE_JSON="$PROJECT_DIR/extension/package.json"
 
 # =====================================================================
 # 1. CLI --help options must appear in README.md

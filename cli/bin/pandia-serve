@@ -60,7 +60,7 @@ SERVER_SCRIPT=""
 for dir in \
   "$(dirname "$0")/../share/pandia" \
   "/usr/local/share/pandia" \
-  "$(dirname "$0")/.."
+  "$(dirname "$0")/../../server"
 do
   if [ -f "$dir/pandia-server.mjs" ]; then
     SERVER_SCRIPT="$dir/pandia-server.mjs"
