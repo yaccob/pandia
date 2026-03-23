@@ -82,9 +82,11 @@ async function render (content, { format = 'html', math = 'mathml', maxwidth = '
   // the <math> tags client-side and replaces them with its own rendering.
   const outfile = join(workdir, 'output.html')
   cmd += ` --embed-resources --to=html5 --mathml`
+  const cssRules = ['svg{max-width:100%;height:auto!important}', '.markmap-container svg{height:100%!important}']
   if (!center_math) {
-    cmd += ` -V "header-includes=<style>math[display=block]{display:block!important;text-align:left!important}</style>"`
+    cssRules.push('math[display=block]{display:block!important;text-align:left!important}')
   }
+  cmd += ` -V "header-includes=<style>${cssRules.join('')}</style>"`
   cmd += ` -V maxwidth="${maxwidth}"`
   cmd += ` -o "${outfile}" "${infile}"`
 
@@ -95,8 +97,14 @@ async function render (content, { format = 'html', math = 'mathml', maxwidth = '
   // The Lua filter injects backgrounds for SVGs it produces, but some survive
   // without one after pandoc's --embed-resources inlining (DBML, D2).
   html = html.replace(/<svg([^>]*)>([\s\S]*?)<\/svg>/gi, (match, attrs, content) => {
+    // Remove fixed width/height from inline style so CSS height:auto can work.
+    // This must happen for ALL SVGs, even those that already have a background.
+    attrs = attrs.replace(/style="([^"]*)"/, (_, s) => {
+      const cleaned = s.replace(/\b(?:width|height)\s*:\s*[^;]+;?\s*/g, '').trim()
+      return cleaned ? ` style="${cleaned}"` : ''
+    })
     // Skip if the <svg> tag already has a background style
-    if (/background\s*:\s*(?:white|#[Ff]{6}|#[Ff]{3})/i.test(attrs)) return match
+    if (/background\s*:\s*(?:white|#[Ff]{6}|#[Ff]{3})/i.test(attrs)) return `<svg${attrs}>${content}</svg>`
     // Skip if a white rect is already the first child
     if (/^\s*<rect\s[^>]*fill="(?:white|#[Ff]{6}|#[Ff]{3})"/i.test(content)) return match
     // Skip nested SVGs (D2 wraps <svg> inside <svg>) — only patch outermost
