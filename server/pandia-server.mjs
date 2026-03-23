@@ -91,6 +91,42 @@ async function render (content, { format = 'html', math = 'mathml', maxwidth = '
   await execAsync(cmd, { cwd: workdir, env })
   let html = readFileSync(outfile, 'utf-8')
 
+  // Ensure all inline SVGs have a white background rect.
+  // The Lua filter injects backgrounds for SVGs it produces, but some survive
+  // without one after pandoc's --embed-resources inlining (DBML, D2).
+  html = html.replace(/<svg([^>]*)>([\s\S]*?)<\/svg>/gi, (match, attrs, content) => {
+    // Skip if the <svg> tag already has a background style
+    if (/background\s*:\s*(?:white|#[Ff]{6}|#[Ff]{3})/i.test(attrs)) return match
+    // Skip if a white rect is already the first child
+    if (/^\s*<rect\s[^>]*fill="(?:white|#[Ff]{6}|#[Ff]{3})"/i.test(content)) return match
+    // Skip nested SVGs (D2 wraps <svg> inside <svg>) — only patch outermost
+    // We detect nested SVGs by checking if content starts with another <svg>
+    const trimmed = content.replace(/^\s+/, '')
+    if (trimmed.startsWith('<svg')) {
+      // This is a wrapper SVG (D2) — patch the inner SVG instead (handled by recursion)
+      return match
+    }
+    // Build a background rect from viewBox or width/height
+    let bgRect
+    const vb = attrs.match(/viewBox="([^"]+)"/)
+    if (vb) {
+      const parts = vb[1].trim().split(/\s+/)
+      if (parts.length === 4) {
+        bgRect = `<rect x="${parts[0]}" y="${parts[1]}" width="${parts[2]}" height="${parts[3]}" fill="white"/>`
+      }
+    }
+    if (!bgRect) {
+      const w = attrs.match(/width="([^"]+)"/)
+      const h = attrs.match(/height="([^"]+)"/)
+      if (w && h) {
+        bgRect = `<rect width="${w[1]}" height="${h[1]}" fill="white"/>`
+      } else {
+        bgRect = '<rect width="100%" height="100%" fill="white"/>'
+      }
+    }
+    return `<svg${attrs}>\n${bgRect}${content}</svg>`
+  })
+
   if (math === 'mathjax') {
     // Inject MathJax CDN script before </body> — it will find and render <math> tags
     const mathjaxConfig = center_math ? '' : `<script>window.MathJax={chtml:{displayAlign:'left'}};</script>\n`

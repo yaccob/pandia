@@ -26,6 +26,30 @@ local mermaid_server = os.getenv("MERMAID_SERVER")
 -- Kroki server (set via --kroki / --kroki-server)
 local kroki_server = os.getenv("PANDIA_KROKI_URL")
 
+-- Ensure an SVG has a white background. Injects a white rect as the first
+-- child of the root <svg>, so diagram content (rendered later) draws on top.
+local function ensure_svg_background(svg)
+  if not svg then return svg end
+  local vb = svg:match('viewBox="([^"]+)"')
+  local bg_rect
+  if vb then
+    local x, y, w, h = vb:match("([%d%.%-]+)%s+([%d%.%-]+)%s+([%d%.%-]+)%s+([%d%.%-]+)")
+    if x and y and w and h then
+      bg_rect = string.format('<rect x="%s" y="%s" width="%s" height="%s" fill="white"/>', x, y, w, h)
+    end
+  end
+  if not bg_rect then
+    local w = svg:match('width="([^"]+)"')
+    local h = svg:match('height="([^"]+)"')
+    if w and h then
+      bg_rect = string.format('<rect width="%s" height="%s" fill="white"/>', w, h)
+    else
+      bg_rect = '<rect width="100%%" height="100%%" fill="white"/>'
+    end
+  end
+  return svg:gsub('(<svg[^>]*>)', '%1\n' .. bg_rect, 1)
+end
+
 -- Local tool types (rendered without Kroki)
 local local_tools = {
   plantuml = true, graphviz = true, dot = true,
@@ -470,7 +494,7 @@ local function render_dir(code)
     table.insert(svg, elem)
   end
   table.insert(svg, '</svg>')
-  local svg_str = table.concat(svg, "\n")
+  local svg_str = ensure_svg_background(table.concat(svg, "\n"))
 
   if is_html then
     return pandoc.RawBlock("html", svg_str)
@@ -546,8 +570,9 @@ local function render_markmap_html(code)
   if ok then
     local out = io.open(outfile, "r")
     if out then
-      result = pandoc.RawBlock("html", out:read("*a"))
+      local content = out:read("*a")
       out:close()
+      result = pandoc.RawBlock("html", ensure_svg_background(content))
     end
   end
 
@@ -943,6 +968,17 @@ local function pass2_Div(div)
       local rc = rctext and tonumber(rctext:match("%d+")) or 0
 
       if rc == 0 and file_exists(job.outfile) then
+        -- Ensure SVG diagrams have a white background
+        if job.outfile:match("%.svg$") then
+          local svg = read_file(job.outfile)
+          if svg then
+            local patched = ensure_svg_background(svg)
+            if patched ~= svg then
+              local f = io.open(job.outfile, "w")
+              if f then f:write(patched); f:close() end
+            end
+          end
+        end
         return pandoc.Para{pandoc.Image({pandoc.Str(job.caption)}, job.outfile)}
       end
 
