@@ -13,11 +13,11 @@ Most diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zo
 | Markmap | `` ```markmap `` | Interactive HTML / Vector PDF | Local + Container |
 | Ditaa | `` ```ditaa `` | Raster (PNG) | Local + Container |
 | TikZ | `` ```tikz `` | Vector (PDF/SVG) | Local + Container |
-| Nomnoml | `` ```nomnoml `` | Vector (PDF/SVG) | Container (Kroki fallback locally) |
-| DBML | `` ```dbml `` | Vector (PDF/SVG) | Container (Kroki fallback locally) |
-| D2 | `` ```d2 `` | Vector (PDF/SVG) | Container (Kroki fallback locally) |
-| WaveDrom | `` ```wavedrom `` | Vector (PDF/SVG) | Container (Kroki fallback locally) |
-| Dir Tree | `` ```dir `` | Vector (SVG) | Everywhere (pandia native) |
+| Nomnoml | `` ```nomnoml `` | Vector (PDF/SVG) | Local + Container |
+| DBML | `` ```dbml `` | Vector (PDF/SVG) | Local + Container |
+| D2 | `` ```d2 `` | Vector (PDF/SVG) | Local + Container |
+| WaveDrom | `` ```wavedrom `` | Vector (PDF/SVG) | Local + Container |
+| Dir Tree | `` ```dir `` | Vector (SVG) | Local + Container |
 | BPMN | `` ```bpmn `` | Vector (PDF/SVG) | Via Kroki |
 | ERD | `` ```erd `` | Vector (PDF/SVG) | Via Kroki |
 | Pikchr | `` ```pikchr `` | Vector (PDF/SVG) | Via Kroki |

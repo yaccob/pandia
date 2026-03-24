@@ -6,16 +6,57 @@ date: 2026-03-17
 
 # Overview
 
-This document demonstrates embedding **PlantUML** (including **EBNF**),
-**Graphviz**, **Mermaid**, **Markmap**, **Ditaa**, **TikZ**, **Directory Trees**,
-and **LaTeX formulas** in a Markdown document.
-With `--kroki-server URL`, additional diagram types like **BPMN**, **ERD**,
-**Svgbob**, and **Pikchr** are available. **D2**, **WaveDrom**, **Nomnoml**,
-and **DBML** are rendered natively but also available via Kroki as fallback.
+This document demonstrates embedding diagrams and LaTeX formulas in Markdown.
+
+**Local diagram types:** PlantUML (including EBNF), Graphviz, Mermaid, Markmap,
+Ditaa, TikZ, Directory Trees, Nomnoml, DBML, D2, and WaveDrom.
+
+**Kroki diagram types** (require `--kroki-server URL`): BPMN, ERD, Svgbob, Pikchr,
+and many more.
+
+**LaTeX math** (`$...$` inline, `$$...$$` block) is rendered natively by Pandoc.
+
+All diagram types produce vector graphics (SVG) except Ditaa (raster/PNG).
 
 ---
 
-## Directory Tree
+## LaTeX Formulas (Pandoc native)
+
+### Inline
+
+Euler's identity $e^{i\pi} + 1 = 0$ connects five fundamental constants.
+
+### Block Formulas
+
+The quadratic formula:
+
+$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
+
+Deriving it by completing the square:
+
+$$
+\begin{alignedat}{2}
+  ax^2 + bx + c &= 0           &\quad&|\; \div a \\
+  x^2 + \frac{b}{a}x &= -\frac{c}{a} &&|\; + \left(\frac{b}{2a}\right)^2 \\
+  \left(x + \frac{b}{2a}\right)^2 &= \frac{b^2 - 4ac}{4a^2} &&|\; \sqrt{\phantom{x}} \\
+  x + \frac{b}{2a} &= \pm\frac{\sqrt{b^2 - 4ac}}{2a} &&|\; - \frac{b}{2a} \\
+  x &= \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+\end{alignedat}
+$$
+
+The Gaussian integral:
+
+$$\int_{-\infty}^{\infty} e^{-x^2}\, dx = \sqrt{\pi}$$
+
+The Collatz conjecture considers the sequence:
+
+$$a_{n+1} = \begin{cases} \frac{a_n}{2} & \text{if } a_n \text{ is even} \\ 3a_n + 1 & \text{if } a_n \text{ is odd} \end{cases}$$
+
+---
+
+## Local Diagram Types
+
+### Directory Tree
 
 A `` ```dir `` block renders a directory tree as an SVG graphic.
 The hierarchy is defined purely by indentation — no special characters needed.
@@ -49,7 +90,42 @@ pandia
   .gitignore
 ```
 
-## PlantUML Salt
+### Graphviz – Directed Graph
+
+```graphviz
+digraph G {
+  rankdir=LR;
+  node [shape=box, style=filled, fillcolor=lightyellow];
+
+  Start -> "Step 1" -> "Step 2" -> End;
+  Start -> "Step 3" -> End;
+
+  Start [shape=circle, fillcolor=lightgreen];
+  End [shape=doublecircle, fillcolor=lightcoral];
+}
+```
+
+### Graphviz – State Machine
+
+```graphviz
+digraph fsm {
+  rankdir=LR;
+  node [shape=circle];
+
+  S0 [label="Idle"];
+  S1 [label="Running"];
+  S2 [label="Error"];
+  S3 [label="Done", shape=doublecircle];
+
+  S0 -> S1 [label="start"];
+  S1 -> S1 [label="tick"];
+  S1 -> S2 [label="fail"];
+  S1 -> S3 [label="finish"];
+  S2 -> S0 [label="reset"];
+}
+```
+
+### PlantUML Salt
 ```plantuml
 @startsalt
 {
@@ -83,12 +159,12 @@ pandia
 @endsalt
 ```
 
-## PlantUML - OpenIconic
+### PlantUML - OpenIconic
 ```plantuml
 listopeniconic
 ```
 
-## PlantUML – Sequence Diagram
+### PlantUML – Sequence Diagram
 
 ```plantuml
 actor User
@@ -104,7 +180,7 @@ BE --> FE : JSON
 FE --> User : Display
 ```
 
-## PlantUML – Class Diagram
+### PlantUML – Class Diagram
 
 ```plantuml
 @startuml
@@ -122,7 +198,7 @@ class Motorcycle extends Vehicle {
 @enduml
 ```
 
-## PlantUML – EBNF Syntax Diagram (SQL SELECT)
+### PlantUML – EBNF Syntax Diagram (SQL SELECT)
 
 ```plantuml
 @startebnf
@@ -163,42 +239,7 @@ limit_clause = "LIMIT" , integer , [ "OFFSET" , integer ] ;
 @endebnf
 ```
 
-## Graphviz – Directed Graph
-
-```graphviz
-digraph G {
-  rankdir=LR;
-  node [shape=box, style=filled, fillcolor=lightyellow];
-
-  Start -> "Step 1" -> "Step 2" -> End;
-  Start -> "Step 3" -> End;
-
-  Start [shape=circle, fillcolor=lightgreen];
-  End [shape=doublecircle, fillcolor=lightcoral];
-}
-```
-
-## Graphviz – State Machine
-
-```graphviz
-digraph fsm {
-  rankdir=LR;
-  node [shape=circle];
-
-  S0 [label="Idle"];
-  S1 [label="Running"];
-  S2 [label="Error"];
-  S3 [label="Done", shape=doublecircle];
-
-  S0 -> S1 [label="start"];
-  S1 -> S1 [label="tick"];
-  S1 -> S2 [label="fail"];
-  S1 -> S3 [label="finish"];
-  S2 -> S0 [label="reset"];
-}
-```
-
-## Mermaid – Flowchart
+### Mermaid – Flowchart
 
 ```mermaid
 flowchart TD
@@ -210,7 +251,7 @@ flowchart TD
     E --> F[End]
 ```
 
-## Mermaid – Gantt Chart
+### Mermaid – Gantt Chart
 
 ```mermaid
 gantt
@@ -226,7 +267,7 @@ gantt
     Integration       :t1, after e1, 14d
 ```
 
-## Markmap – Interactive Mind Map
+### Markmap – Interactive Mind Map
 
 In HTML output, this renders as an interactive, expandable mind map.
 In PDF output, a static snapshot is used.
@@ -268,21 +309,7 @@ In PDF output, a static snapshot is used.
 #### Grafana
 ```
 
-## Ditaa – ASCII Art Diagram
-
-```ditaa
-    +--------+   +-------+    +-------+
-    |        +---+ ditaa +----+       |
-    | Text   |   +-------+    |Diagram|
-    |Document|   |{io}   |    |       |
-    |     {d}|   |       |    |       |
-    +---+----+   +-------+    +-------+
-        :                         ^
-        |       Generation        |
-        +-------------------------+
-```
-
-## TikZ – Vector Drawing
+### TikZ – Vector Drawing
 
 ```tikz
 \usepackage{tikz-3dplot}
@@ -353,19 +380,7 @@ In PDF output, a static snapshot is used.
   \end{tikzpicture}
 ```
 
-## Nomnoml – UML Diagrams
-
-```nomnoml
-[<frame>Authentication Flow |
-  [User] -> [Login Form]
-  [Login Form] -> [Auth Service]
-  [Auth Service] -> [<database> User DB]
-  [Auth Service] -> [Token Service]
-  [Token Service] --> [User]
-]
-```
-
-## DBML – Database Schema
+### DBML – Database Schema
 
 ```dbml
 Table users {
@@ -392,7 +407,19 @@ Table comments {
 }
 ```
 
-## D2 – Declarative Diagrams
+### Nomnoml – UML Diagrams
+
+```nomnoml
+[<frame>Authentication Flow |
+  [User] -> [Login Form]
+  [Login Form] -> [Auth Service]
+  [Auth Service] -> [<database> User DB]
+  [Auth Service] -> [Token Service]
+  [Token Service] --> [User]
+]
+```
+
+### D2 – Declarative Diagrams
 
 ```d2
 Server: {
@@ -406,7 +433,7 @@ Server: {
 }
 ```
 
-## WaveDrom – Digital Timing Diagrams
+### WaveDrom – Digital Timing Diagrams
 
 ```wavedrom
 { "signal": [
@@ -418,7 +445,25 @@ Server: {
 ]}
 ```
 
-## Kroki-powered Diagrams
+### Ditaa – ASCII Art Diagram
+
+Ditaa is the only diagram type that produces raster output (PNG) instead of SVG.
+
+```ditaa
+    +--------+   +-------+    +-------+
+    |        +---+ ditaa +----+       |
+    | Text   |   +-------+    |Diagram|
+    |Document|   |{io}   |    |       |
+    |     {d}|   |       |    |       |
+    +---+----+   +-------+    +-------+
+        :                         ^
+        |       Generation        |
+        +-------------------------+
+```
+
+---
+
+## Kroki Diagram Types
 
 The following diagrams are rendered via [Kroki](https://kroki.io) and require
 `--kroki-server URL`. They are ignored without Kroki enabled.
@@ -501,51 +546,7 @@ The following diagrams are rendered via [Kroki](https://kroki.io) and require
 </definitions>
 ```
 
-### D2 – Declarative Diagrams
-
-```d2
-server: Web Server {
-  handler: Request Handler
-  auth: Auth Middleware
-  db: Database Pool
-}
-
-client: Browser
-cdn: CDN
-
-client -> cdn: Static assets
-client -> server.handler: API requests
-server.handler -> server.auth: Authenticate
-server.auth -> server.db: Query
-```
-
-### DBML – Database Schema
-
-```dbml
-Table users {
-  id integer [primary key]
-  username varchar [not null, unique]
-  email varchar [not null]
-  created_at timestamp [default: `now()`]
-}
-
-Table posts {
-  id integer [primary key]
-  title varchar [not null]
-  body text
-  user_id integer [ref: > users.id]
-  created_at timestamp
-}
-
-Table comments {
-  id integer [primary key]
-  body text [not null]
-  post_id integer [ref: > posts.id]
-  user_id integer [ref: > users.id]
-}
-```
-
-### Entity Relationship Diagram
+### ERD – Entity Relationship Diagram
 
 ```erd
 [Customer]
@@ -582,28 +583,6 @@ Order *--* Product
         '---'           '---'
 ```
 
-### WaveDrom – Timing Diagram
-
-```wavedrom
-{ "signal": [
-  { "name": "clk",  "wave": "p........." },
-  { "name": "req",  "wave": "0.1..0.1.." },
-  { "name": "ack",  "wave": "0..1.0..1." },
-  { "name": "data", "wave": "x..345x...", "data": ["A", "B", "C"] }
-]}
-```
-
-### Nomnoml – UML Diagrams
-
-```nomnoml
-[<frame>MVC Pattern |
-  [Controller] -> [Model]
-  [Controller] -> [View]
-  [Model] --> [View]
-  [View] --:> [Controller]
-]
-```
-
 ### Pikchr – Technical Illustrations
 
 ```pikchr
@@ -614,55 +593,23 @@ arrow right 200% "Output" above
 
 ---
 
-## LaTeX Formulas
-
-### Inline
-
-Euler's identity $e^{i\pi} + 1 = 0$ connects five fundamental constants.
-
-### Block Formulas
-
-The quadratic formula:
-
-$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
-
-Deriving it by completing the square:
-
-$$
-\begin{alignedat}{2}
-  ax^2 + bx + c &= 0           &\quad&|\; \div a \\
-  x^2 + \frac{b}{a}x &= -\frac{c}{a} &&|\; + \left(\frac{b}{2a}\right)^2 \\
-  \left(x + \frac{b}{2a}\right)^2 &= \frac{b^2 - 4ac}{4a^2} &&|\; \sqrt{\phantom{x}} \\
-  x + \frac{b}{2a} &= \pm\frac{\sqrt{b^2 - 4ac}}{2a} &&|\; - \frac{b}{2a} \\
-  x &= \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
-\end{alignedat}
-$$
-
-The Gaussian integral:
-
-$$\int_{-\infty}^{\infty} e^{-x^2}\, dx = \sqrt{\pi}$$
-
-The Collatz conjecture considers the sequence:
-
-$$a_{n+1} = \begin{cases} \frac{a_n}{2} & \text{if } a_n \text{ is even} \\ 3a_n + 1 & \text{if } a_n \text{ is odd} \end{cases}$$
-
 ## Summary
 
-| Feature   | Syntax              | Rendering       |
-|-----------|---------------------|-----------------|
-| PlantUML  | `` ```plantuml ``   | Local           |
-| Graphviz  | `` ```graphviz ``   | Local           |
-| Mermaid   | `` ```mermaid ``    | Local           |
+| Feature   | Syntax              | Rendering                   |
+|-----------|---------------------|-----------------------------|
+| LaTeX     | `$...$` / `$$...$$` | Local (Pandoc native)       |
+| Dir Tree  | `` ```dir ``        | Local                       |
+| Graphviz  | `` ```graphviz ``   | Local                       |
+| PlantUML  | `` ```plantuml ``   | Local                       |
+| Mermaid   | `` ```mermaid ``    | Local                       |
 | Markmap   | `` ```markmap ``    | Local (interactive in HTML) |
-| Ditaa     | `` ```ditaa ``      | Local           |
-| TikZ      | `` ```tikz ``       | Local           |
-| Dir Tree  | `` ```dir ``        | Local (SVG)     |
-| D2        | `` ```d2 ``         | Local / Kroki   |
-| DBML      | `` ```dbml ``       | Local / Kroki   |
-| Nomnoml   | `` ```nomnoml ``    | Local / Kroki   |
-| WaveDrom  | `` ```wavedrom ``   | Local / Kroki   |
-| BPMN      | `` ```bpmn ``       | Kroki           |
-| ERD       | `` ```erd ``        | Kroki           |
-| Svgbob    | `` ```svgbob ``     | Kroki           |
-| Pikchr    | `` ```pikchr ``     | Kroki           |
-| LaTeX     | `$...$` / `$$...$$` | Pandoc native  |
+| TikZ      | `` ```tikz ``       | Local                       |
+| DBML      | `` ```dbml ``       | Local                       |
+| Nomnoml   | `` ```nomnoml ``    | Local                       |
+| D2        | `` ```d2 ``         | Local                       |
+| WaveDrom  | `` ```wavedrom ``   | Local                       |
+| Ditaa     | `` ```ditaa ``      | Local (raster/PNG)          |
+| BPMN      | `` ```bpmn ``       | Kroki                       |
+| ERD       | `` ```erd ``        | Kroki                       |
+| Svgbob    | `` ```svgbob ``     | Kroki                       |
+| Pikchr    | `` ```pikchr ``     | Kroki                       |
