@@ -28,6 +28,10 @@ const browser = await puppeteer.launch({
   args: puppeteerConfig.args || []
 })
 
+// Expose WebSocket endpoint so other tools (markmap) can share this Chromium
+import { writeFileSync as _ws } from 'fs'
+try { _ws('/tmp/chromium-browser-ws.url', browser.wsEndpoint()) } catch {}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`)
 

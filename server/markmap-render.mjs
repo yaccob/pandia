@@ -85,6 +85,9 @@ async function importMarkmap () {
 }
 
 import { execSync } from 'child_process'
+import { existsSync } from 'fs'
+
+const BROWSER_WS_FILE = '/tmp/chromium-browser-ws.url'
 
 function buildLaunchOpts () {
   const opts = { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
@@ -108,39 +111,93 @@ function buildLaunchOpts () {
   return opts
 }
 
+// Find local copies of d3/markmap-view to avoid CDN downloads during measurement
+function findLocalAssets () {
+  const bases = [
+    '/opt/homebrew/lib/node_modules/markmap-cli',
+    '/usr/local/lib/node_modules/markmap-cli',
+    '/usr/lib/node_modules/markmap-cli'
+  ]
+  for (const base of bases) {
+    const d3 = `${base}/node_modules/d3/dist/d3.min.js`
+    const mmView = `${base}/node_modules/markmap-view/dist/browser/index.js`
+    if (existsSync(d3) && existsSync(mmView)) return { d3, mmView }
+  }
+  return null
+}
+
+// Replace CDN <script src="..."> tags with inline <script> containing local file contents.
+// Uses function replacements to avoid $-sign interpretation in d3.min.js.
+function inlineLocalAssets (html) {
+  const assets = findLocalAssets()
+  if (!assets) return html
+  const d3Code = readFileSync(assets.d3, 'utf-8')
+  const mmCode = readFileSync(assets.mmView, 'utf-8')
+  html = html.replace(
+    /<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/d3@[^"]*"><\/script>/,
+    () => `<script>${d3Code}</script>`
+  )
+  html = html.replace(
+    /<script src="https:\/\/cdn\.jsdelivr\.net\/npm\/markmap-view@[^"]*"><\/script>/,
+    () => `<script>${mmCode}</script>`
+  )
+  return html
+}
+
+// Try to connect to a shared Chromium instance (e.g. from mermaid-server),
+// fall back to launching our own.
+async function acquireBrowser (puppeteer) {
+  if (existsSync(BROWSER_WS_FILE)) {
+    try {
+      const wsUrl = readFileSync(BROWSER_WS_FILE, 'utf-8').trim()
+      const browser = await puppeteer.default.connect({ browserWSEndpoint: wsUrl })
+      return { browser, shared: true }
+    } catch {}
+  }
+  const browser = await puppeteer.default.launch(buildLaunchOpts())
+  return { browser, shared: false }
+}
+
+async function releaseBrowser ({ browser, shared }) {
+  if (shared) browser.disconnect()
+  else await browser.close()
+}
+
 async function measureMarkmapHeight (root, assets) {
   // Render in headless browser to measure the exact content height
   const { fillTemplate } = await importMarkmap()
-  const html = fillTemplate(root, assets)
+  // Inline local JS files to avoid CDN latency during headless measurement
+  const html = inlineLocalAssets(fillTemplate(root, assets))
 
   const tmpHtml = join(tmpdir(), `markmap-measure-${Date.now()}.html`)
   writeFileSync(tmpHtml, html)
 
   const puppeteer = await loadPuppeteer()
-  const launchOpts = buildLaunchOpts()
-  const browser = await puppeteer.default.launch(launchOpts)
-  const page = await browser.newPage()
+  const handle = await acquireBrowser(puppeteer)
+  const page = await handle.browser.newPage()
   await page.setViewport({ width: 1200, height: 800 })
   await page.goto(`file://${resolve(tmpHtml)}`, { waitUntil: 'networkidle0' })
 
   try {
-    await page.waitForSelector('svg#markmap g', { timeout: 10000 })
+    await page.waitForSelector('svg#mindmap g', { timeout: 10000 })
   } catch {
-    await browser.close()
+    await page.close()
+    await releaseBrowser(handle)
     try { unlinkSync(tmpHtml) } catch {}
     return null
   }
   await new Promise(r => setTimeout(r, 500))
 
   const height = await page.evaluate(() => {
-    const svg = document.querySelector('svg#markmap')
+    const svg = document.querySelector('svg#mindmap')
     const g = svg && svg.querySelector('g')
     if (!g) return null
     const bbox = g.getBBox()
     return Math.ceil(bbox.height + 40)
   })
 
-  await browser.close()
+  await page.close()
+  await releaseBrowser(handle)
   try { unlinkSync(tmpHtml) } catch {}
   return height
 }
@@ -254,8 +311,8 @@ async function generatePdf (content, id, outputPath) {
 
   const puppeteer = await loadPuppeteer()
 
-  const browser = await puppeteer.default.launch(buildLaunchOpts())
-  const page = await browser.newPage()
+  const handle = await acquireBrowser(puppeteer)
+  const page = await handle.browser.newPage()
   await page.setViewport({ width: 1600, height: 1200 })
   await page.goto(`file://${resolve(tmpHtml)}`, { waitUntil: 'networkidle0' })
 
@@ -298,7 +355,8 @@ async function generatePdf (content, id, outputPath) {
   })
 
   if (!dims) {
-    await browser.close()
+    await page.close()
+    await releaseBrowser(handle)
     try { unlinkSync(tmpHtml) } catch {}
     process.stderr.write('markmap error: failed to measure rendered content\n')
     process.exit(1)
@@ -316,7 +374,8 @@ async function generatePdf (content, id, outputPath) {
     margin: { top: '0px', right: '0px', bottom: '0px', left: '0px' }
   })
 
-  await browser.close()
+  await page.close()
+  await releaseBrowser(handle)
   try { unlinkSync(tmpHtml) } catch {}
 }
 
