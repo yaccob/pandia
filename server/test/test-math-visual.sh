@@ -2,11 +2,11 @@
 # Visual math rendering tests — verifies actual rendering quality via headless Chromium.
 # Requires a running pandia server and Puppeteer (via mermaid-cli or standalone).
 set -euo pipefail
-source "$(dirname "$0")/../../test/helpers.sh"
+source "$(dirname "$0")/helpers.sh"
 
 SERVE_PORT="${1:-13398}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-TEST_SCRIPT="$SCRIPT_DIR/test/test-math-rendering.mjs"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEST_SCRIPT="$SCRIPT_DIR/test-math-rendering.mjs"
 
 if ! command -v node >/dev/null 2>&1; then
   printf "  SKIP visual math tests: node not available\n"
@@ -14,7 +14,7 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 # --- Start a local server ---
-PANDIA_SERVE="$SCRIPT_DIR/cli/bin/pandia-serve"
+PANDIA_SERVE="$PROJECT_DIR/cli/bin/pandia-serve"
 "$PANDIA_SERVE" "$SERVE_PORT" &
 SERVER_PID=$!
 cleanup() { kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MATH_DIR"; }

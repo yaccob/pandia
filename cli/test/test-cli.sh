@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(dirname "$0")/../../test/helpers.sh"
+source "$(dirname "$0")/helpers.sh"
 
 section "cli: version and help"
 

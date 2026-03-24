@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # -------------------------------------------------------------------
-# pandia test helpers — shared assertions, runners, and utilities
-# Sourced by test modules; not meant to be run directly.
+# Server test helpers — assertions, filter runners, and utilities
+# Sourced by server test modules; not meant to be run directly.
 # -------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-FILTER="${PANDIA_TEST_FILTER:-$PROJECT_DIR/server/diagram-filter.lua}"
+SERVER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_DIR="$(cd "$SERVER_DIR/.." && pwd)"
+FILTER="${PANDIA_TEST_FILTER:-$SERVER_DIR/diagram-filter.lua}"
 PANDIA="$PROJECT_DIR/cli/bin/pandia"
 
 if [[ ! -f "$FILTER" ]]; then
@@ -84,21 +85,18 @@ section() {
   printf "\n${BOLD}%s${RESET}\n" "$1"
 }
 
-# --- Helpers ----------------------------------------------------------
+# --- Filter runners ---------------------------------------------------
 
 WORK_DIR=""
 
 setup_workdir() {
   WORK_DIR=$(mktemp -d)
   cp "$FILTER" "$WORK_DIR/"
-  # Copy helper scripts that the filter may invoke
   local filter_dir
   filter_dir=$(dirname "$FILTER")
   for helper in markmap-render.mjs; do
     if [[ -f "$filter_dir/$helper" ]]; then
       cp "$filter_dir/$helper" "$WORK_DIR/"
-    elif [[ -f "$PROJECT_DIR/$helper" ]]; then
-      cp "$PROJECT_DIR/$helper" "$WORK_DIR/"
     fi
   done
 }
@@ -129,8 +127,6 @@ run_filter_isolated() {
   return $rc
 }
 
-# Run filter in isolated workdir and KEEP workdir for inspection.
-# Caller must call teardown_workdir when done.
 run_filter_isolated_keep() {
   local input="$1"
   setup_workdir
@@ -157,8 +153,6 @@ run_filter_isolated_both() {
   teardown_workdir
 }
 
-# Run filter targeting PDF (latex output) in isolated workdir.
-# WORK_DIR is preserved — caller must call teardown_workdir.
 run_filter_pdf_keep() {
   local input="$1"
   setup_workdir
@@ -203,7 +197,7 @@ elif command -v docker >/dev/null 2>&1; then
   CONTAINER_RT="docker"
 fi
 
-# --- Summary helper (called at end of each module) --------------------
+# --- Summary ----------------------------------------------------------
 
 print_summary() {
   printf "\n${BOLD}Results:${RESET} "

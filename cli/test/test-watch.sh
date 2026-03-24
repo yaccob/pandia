@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(dirname "$0")/../../test/helpers.sh"
+source "$(dirname "$0")/helpers.sh"
 
 if [[ -z "$CONTAINER_RT" ]]; then
   printf "\n${BOLD}cli: --watch mode${RESET}\n"

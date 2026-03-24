@@ -2,6 +2,9 @@
 # Container integration tests — runs against a pure image (no source mounts)
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 PORT="${1:-13301}"
 CONTAINER="pandia-test-all"
 RT="${CONTAINER_RT:-$(command -v podman 2>/dev/null || command -v docker 2>/dev/null)}"
@@ -18,7 +21,7 @@ fail() { FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "$1"; ERRORS="${
 # --- Start container (pure image, no source mounts) ---
 $RT stop "$CONTAINER" >/dev/null 2>&1 || true
 $RT rm -f "$CONTAINER" >/dev/null 2>&1 || true
-$RT run --rm -d --name "$CONTAINER" -p "${PORT}:${PORT}" -v "$PWD:/data" \
+$RT run --rm -d --name "$CONTAINER" -p "${PORT}:${PORT}" -v "$PROJECT_DIR:/data" \
   "$IMAGE" pandia-serve "$PORT" >/dev/null 2>&1
 
 for i in $(seq 1 30); do
@@ -62,7 +65,7 @@ printf "\n${BOLD}container: /render example.md completeness${RESET}\n"
 
 # Render example.md via /render (read from /data volume)
 curl -sf -X POST "http://localhost:${PORT}/render?kroki_server=https://kroki.io" \
-  --data-binary @docs/example.md > example-container.html 2>&1 || fail "/render example.md"
+  --data-binary @"$PROJECT_DIR/docs/example.md" > example-container.html 2>&1 || fail "/render example.md"
 sleep 1
 
 check_render_section() {
@@ -218,7 +221,7 @@ fi
 
 # --- Server rendering tests (reuse running container) ---
 printf "\n${BOLD}Server rendering tests (diagram layout):${RESET}\n"
-if node server/test/test-diagram-layout.mjs "http://localhost:${PORT}" 2>&1; then
+if node "$PROJECT_DIR/server/test/test-diagram-layout.mjs" "http://localhost:${PORT}" 2>&1; then
   PASS=$((PASS + 1))
 else
   FAIL=$((FAIL + 1))
