@@ -216,6 +216,15 @@ else
 fi
 
 
+# --- Server rendering tests (reuse running container) ---
+printf "\n${BOLD}Server rendering tests (diagram layout):${RESET}\n"
+if node server/test/test-diagram-layout.mjs "http://localhost:${PORT}" 2>&1; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  ERRORS="${ERRORS}\n  FAIL: diagram layout"
+fi
+
 # --- Cleanup ---
 $RT stop "$CONTAINER" >/dev/null 2>&1 || true
 

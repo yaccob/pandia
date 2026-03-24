@@ -58,6 +58,7 @@ test-quick:
 	bash cli/test/test-cli.sh
 	bash test/test-docs.sh
 	bash server/test/test-math-visual.sh
+	node server/test/test-diagram-layout.mjs
 
 # --- Mutation testing ---
 

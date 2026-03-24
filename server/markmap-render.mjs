@@ -12,8 +12,9 @@
 // markmap blocks appear in one document.
 
 import { readFileSync, writeFileSync, unlinkSync } from 'fs'
-import { resolve, dirname } from 'path'
+import { resolve, dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { tmpdir } from 'os'
 
 // Parse arguments
 const args = process.argv.slice(2)
@@ -83,8 +84,69 @@ async function importMarkmap () {
   return { Transformer, fillTemplate }
 }
 
+import { execSync } from 'child_process'
+
+function buildLaunchOpts () {
+  const opts = { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+  // Use MMDC_PUPPETEER_CONFIG if set (mermaid-cli convention)
+  const puppeteerConfig = process.env.MMDC_PUPPETEER_CONFIG
+  if (puppeteerConfig) {
+    try {
+      Object.assign(opts, JSON.parse(readFileSync(puppeteerConfig, 'utf-8')))
+    } catch {}
+  }
+  // Auto-detect system Chromium (e.g. in Alpine containers)
+  if (!opts.executablePath) {
+    for (const bin of ['/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/google-chrome']) {
+      try {
+        execSync(`test -x ${bin}`, { stdio: 'ignore' })
+        opts.executablePath = bin
+        break
+      } catch {}
+    }
+  }
+  return opts
+}
+
+async function measureMarkmapHeight (root, assets) {
+  // Render in headless browser to measure the exact content height
+  const { fillTemplate } = await importMarkmap()
+  const html = fillTemplate(root, assets)
+
+  const tmpHtml = join(tmpdir(), `markmap-measure-${Date.now()}.html`)
+  writeFileSync(tmpHtml, html)
+
+  const puppeteer = await loadPuppeteer()
+  const launchOpts = buildLaunchOpts()
+  const browser = await puppeteer.default.launch(launchOpts)
+  const page = await browser.newPage()
+  await page.setViewport({ width: 1200, height: 800 })
+  await page.goto(`file://${resolve(tmpHtml)}`, { waitUntil: 'networkidle0' })
+
+  try {
+    await page.waitForSelector('svg#markmap g', { timeout: 10000 })
+  } catch {
+    await browser.close()
+    try { unlinkSync(tmpHtml) } catch {}
+    return null
+  }
+  await new Promise(r => setTimeout(r, 500))
+
+  const height = await page.evaluate(() => {
+    const svg = document.querySelector('svg#markmap')
+    const g = svg && svg.querySelector('g')
+    if (!g) return null
+    const bbox = g.getBBox()
+    return Math.ceil(bbox.height + 40)
+  })
+
+  await browser.close()
+  try { unlinkSync(tmpHtml) } catch {}
+  return height
+}
+
 async function generateHtmlFragment (content, id) {
-  const { Transformer, fillTemplate } = await importMarkmap()
+  const { Transformer } = await importMarkmap()
   const t = new Transformer()
   const { root, features } = t.transform(content)
   const assets = t.getUsedAssets(features)
@@ -93,9 +155,9 @@ async function generateHtmlFragment (content, id) {
   const containerId = `markmap-${id}`
   const jsonData = JSON.stringify(root)
 
-  // Initial height is generous; the client script will measure the actual
-  // rendered size (all nodes expanded) and shrink to fit.
-  const initialHeight = 2000
+  // Measure exact height by rendering in headless browser
+  const measuredHeight = await measureMarkmapHeight(root, assets)
+  const containerHeight = measuredHeight || 400
 
   // Extract script URLs from assets
   const scriptUrls = []
@@ -114,7 +176,7 @@ async function generateHtmlFragment (content, id) {
     )
   }
 
-  const fragment = `<div class="markmap-container" id="container-${containerId}" style="height:${initialHeight}px;margin:1em 0">
+  const fragment = `<div class="markmap-container" id="container-${containerId}" style="height:${containerHeight}px;margin:1em 0">
 <svg id="${containerId}" style="width:100%;height:100%"></svg>
 </div>
 <script>
@@ -122,12 +184,11 @@ async function generateHtmlFragment (content, id) {
   var scripts = ${JSON.stringify(scriptUrls)};
   var loaded = 0;
   function fitContainer() {
-    // Measure actual rendered content and resize container to fit
     var svg = document.querySelector("svg#${containerId}");
     var g = svg && svg.querySelector("g");
     if (!g) return;
     var bbox = g.getBBox();
-    var height = Math.max(400, Math.ceil(bbox.height + 40));
+    var height = Math.ceil(bbox.height + 40);
     var container = document.getElementById("container-${containerId}");
     if (container) container.style.height = height + "px";
   }
@@ -137,7 +198,6 @@ async function generateHtmlFragment (content, id) {
     var mm = window.markmap;
     if (mm && mm.Markmap) {
       instance = mm.Markmap.create("svg#${containerId}", mm.deriveOptions ? mm.deriveOptions() : null, data);
-      // After render + animation: resize container then re-center tree
       setTimeout(function() {
         fitContainer();
         if (instance && instance.fit) instance.fit();
@@ -146,7 +206,6 @@ async function generateHtmlFragment (content, id) {
   }
   function loadNext() {
     if (loaded >= scripts.length) { onReady(); return; }
-    // Skip if already loaded
     var existing = document.querySelector('script[src="' + scripts[loaded] + '"]');
     if (existing) { loaded++; loadNext(); return; }
     var s = document.createElement("script");
@@ -195,16 +254,7 @@ async function generatePdf (content, id, outputPath) {
 
   const puppeteer = await loadPuppeteer()
 
-  const puppeteerConfig = process.env.MMDC_PUPPETEER_CONFIG
-  const launchOpts = { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
-  if (puppeteerConfig) {
-    try {
-      const config = JSON.parse(readFileSync(puppeteerConfig, 'utf-8'))
-      Object.assign(launchOpts, config)
-    } catch {}
-  }
-
-  const browser = await puppeteer.default.launch(launchOpts)
+  const browser = await puppeteer.default.launch(buildLaunchOpts())
   const page = await browser.newPage()
   await page.setViewport({ width: 1600, height: 1200 })
   await page.goto(`file://${resolve(tmpHtml)}`, { waitUntil: 'networkidle0' })
