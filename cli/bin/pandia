@@ -2,24 +2,7 @@
 set -e
 
 VERSION="1.7.0"
-FILTER_NAME="diagram-filter.lua"
-
-# --- Detect filter location ---
-find_filter() {
-  for dir in \
-    "$(dirname "$0")/../share/pandia" \
-    "$(dirname "$0")/../../server" \
-    "/usr/local/share/pandia" \
-    "/opt/homebrew/share/pandia" \
-    "$HOME/.local/share/pandia"
-  do
-    if [ -f "$dir/$FILTER_NAME" ]; then
-      echo "$dir/$FILTER_NAME"
-      return 0
-    fi
-  done
-  return 1
-}
+DEFAULT_SERVER="http://localhost:3300"
 
 # --- Usage ---
 usage() {
@@ -32,18 +15,15 @@ Options:
   -t, --to FORMAT       Output format: pdf, html (default: html)
   -o, --output FILE     Write output to FILE (default: stdout)
   --watch               Watch for changes and regenerate (requires -o)
-  --server URL          Use a pandia server instead of local tools
+  --server URL          Server URL (default: $DEFAULT_SERVER)
   --maxwidth WIDTH      Max content width for HTML output (default: 60em)
   --center-math         Center block formulas (default: left-aligned)
-  --kroki-server URL    Enable Kroki for additional diagram types (local mode only)
   -v, --version         Show version
   -h, --help            Show this help
 
-Modes:
-  Without --server:     Renders locally (requires pandoc + tools installed)
-  With --server URL:    Sends Markdown to a pandia server via HTTP
-
-  To start a server:    pandia-serve [PORT]
+Requires a running pandia server. Start one with:
+  pandia-serve                        # local (requires pandoc + tools)
+  docker run -d -p 3300:3300 yaccob/pandia pandia-serve
 
 Diagram types: plantuml, graphviz/dot, mermaid, markmap, ditaa, tikz,
   nomnoml, dbml, d2, wavedrom, dir
@@ -60,7 +40,6 @@ SERVER_URL=""
 OUTPUT_FILE=""
 MAXWIDTH="60em"
 CENTER_MATH=false
-KROKI_URL=""
 INPUT=""
 
 while [ $# -gt 0 ]; do
@@ -81,7 +60,6 @@ while [ $# -gt 0 ]; do
     -o|--output)    OUTPUT_FILE="$2"; shift 2 ;;
     --maxwidth)     MAXWIDTH="$2"; shift 2 ;;
     --center-math)  CENTER_MATH=true; shift ;;
-    --kroki-server) KROKI_URL="$2"; shift 2 ;;
     -v|--version)   echo "pandia v${VERSION}"; exit 0 ;;
     -h|--help)      usage ;;
     -*)             echo "Unknown option: $1" >&2; echo "Run 'pandia --help' for usage." >&2; exit 1 ;;
@@ -105,14 +83,19 @@ if [ -z "$FORMAT" ]; then
   FORMAT=html
 fi
 
+# Default server
+if [ -z "$SERVER_URL" ]; then
+  SERVER_URL="$DEFAULT_SERVER"
+fi
+
 # --watch requires -o
 if [ "$WATCH" = true ] && [ -z "$OUTPUT_FILE" ]; then
   echo "Error: --watch requires -o FILE to specify an output file." >&2
   exit 1
 fi
 
-# --- Server mode: send to pandia server via HTTP ---
-run_server() {
+# --- Render via server HTTP API ---
+render() {
   local params="format=${FORMAT}&maxwidth=${MAXWIDTH}"
   if [ "$CENTER_MATH" = true ]; then
     params="${params}&center_math=true"
@@ -127,10 +110,15 @@ run_server() {
       -o "$OUTPUT_FILE" 2>/dev/null) || true
 
     if [ "$http_code" != "200" ]; then
-      echo "Error: Server returned HTTP $http_code" >&2
-      if [ -f "$OUTPUT_FILE" ]; then
-        cat "$OUTPUT_FILE" >&2
-        rm -f "$OUTPUT_FILE"
+      if [ -z "$http_code" ] || [ "$http_code" = "000" ]; then
+        echo "Error: Cannot connect to server at $SERVER_URL" >&2
+        echo "Start a server with: pandia-serve" >&2
+      else
+        echo "Error: Server returned HTTP $http_code" >&2
+        if [ -f "$OUTPUT_FILE" ]; then
+          cat "$OUTPUT_FILE" >&2
+          rm -f "$OUTPUT_FILE"
+        fi
       fi
       return 1
     fi
@@ -145,8 +133,13 @@ run_server() {
       -o "$tmpfile" 2>/dev/null) || true
 
     if [ "$http_code" != "200" ]; then
-      echo "Error: Server returned HTTP $http_code" >&2
-      cat "$tmpfile" >&2
+      if [ -z "$http_code" ] || [ "$http_code" = "000" ]; then
+        echo "Error: Cannot connect to server at $SERVER_URL" >&2
+        echo "Start a server with: pandia-serve" >&2
+      else
+        echo "Error: Server returned HTTP $http_code" >&2
+        cat "$tmpfile" >&2
+      fi
       rm -f "$tmpfile"
       return 1
     fi
@@ -155,101 +148,21 @@ run_server() {
   fi
 }
 
-# --- Local mode: call pandoc directly ---
-run_local() {
-  FILTER="$(find_filter)" || {
-    echo "Error: Lua filter not found. Install pandia or use --server." >&2
-    exit 1
-  }
-  PANDOC_COMMON="--lua-filter=$FILTER --from=gfm+tex_math_dollars"
-
-  if [ -n "$KROKI_URL" ]; then
-    export PANDIA_KROKI_URL="$KROKI_URL"
-  fi
-
-  MATH_FLAGS=""
-  MATH_ENGINE="--mathml"
-  if [ "$FORMAT" = pdf ]; then
-    MATH_ENGINE=""  # PDF uses LaTeX natively
-    if [ "$CENTER_MATH" = false ]; then
-      MATH_FLAGS="-V classoption=fleqn"
-    fi
-  else
-    if [ "$CENTER_MATH" = false ]; then
-      MATH_FLAGS="-V header-includes=<style>math[display=block]{display:block!important;text-align:left!important}</style>"
-    fi
-  fi
-
-  if [ -n "$OUTPUT_FILE" ]; then
-    echo "Generating ${OUTPUT_FILE} ..." >&2
-    if [ "$FORMAT" = pdf ]; then
-      pandoc $PANDOC_COMMON \
-        --to=pdf \
-        --pdf-engine=pdflatex \
-        -V geometry:margin=2.5cm \
-        $MATH_FLAGS \
-        --standalone \
-        -o "$OUTPUT_FILE" "$INPUT"
-    else
-      pandoc $PANDOC_COMMON \
-        --to=html5 \
-        --standalone \
-        $MATH_ENGINE \
-        -V maxwidth="$MAXWIDTH" \
-        $MATH_FLAGS \
-        -o "$OUTPUT_FILE" "$INPUT"
-    fi
-    echo "  -> $OUTPUT_FILE" >&2
-  else
-    echo "Generating ${FORMAT} ..." >&2
-    if [ "$FORMAT" = pdf ]; then
-      pandoc $PANDOC_COMMON \
-        --to=pdf \
-        --pdf-engine=pdflatex \
-        -V geometry:margin=2.5cm \
-        $MATH_FLAGS \
-        --standalone \
-        "$INPUT"
-    else
-      pandoc $PANDOC_COMMON \
-        --to=html5 \
-        --standalone \
-        $MATH_ENGINE \
-        -V maxwidth="$MAXWIDTH" \
-        $MATH_FLAGS \
-        "$INPUT"
-    fi
-  fi
-}
-
 # --- Watch mode ---
-run_watch() {
+if [ "$WATCH" = true ]; then
   echo "Watching '$INPUT' for changes (Ctrl+C to stop) ..." >&2
-  run_once
+  render
   LAST_HASH=""
   while true; do
     HASH="$(md5sum "$INPUT" 2>/dev/null || md5 -q "$INPUT" 2>/dev/null || stat -f%m "$INPUT" 2>/dev/null || stat -c%Y "$INPUT" 2>/dev/null)"
     if [ "$HASH" != "$LAST_HASH" ] && [ -n "$LAST_HASH" ]; then
       echo "" >&2
       echo "--- Change detected at $(date +%H:%M:%S) ---" >&2
-      run_once
+      render
     fi
     LAST_HASH="$HASH"
     sleep 1
   done
-}
-
-# --- Dispatch ---
-run_once() {
-  if [ -n "$SERVER_URL" ]; then
-    run_server
-  else
-    run_local
-  fi
-}
-
-if [ "$WATCH" = true ]; then
-  run_watch
 else
-  run_once
+  render
 fi
