@@ -39,7 +39,8 @@ The image (Alpine-based) bundles:
 - **Mermaid CLI** (Chromium-based)
 - **Markmap CLI**
 - **TikZ** (TeX Live, pdflatex, pdftocairo)
-- **Nomnoml**, **DBML**, **D2**, **WaveDrom** (Node.js)
+- **Nomnoml**, **DBML**, **WaveDrom** (Node.js)
+- **D2** (Go binary)
 - **Ditaa** (via PlantUML)
 - **librsvg** (rsvg-convert for SVG→PDF)
 

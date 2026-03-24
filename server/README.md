@@ -17,7 +17,7 @@ Accepts raw Markdown as the request body, returns rendered HTML or PDF.
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
 | `format` | `html`, `pdf` | `html` | Output format |
-| `math` | `mathjax`, `mathml` | `mathjax` | Math rendering engine |
+| `math` | `mathjax`, `mathml` | `mathml` | Math rendering engine |
 | `maxwidth` | CSS value | `60em` | Max content width (HTML) |
 | `center_math` | `true`, `false` | `false` | Center display math |
 | `kroki_server` | URL | — | Kroki server for extra diagram types |
@@ -39,11 +39,11 @@ curl -X POST "http://localhost:3300/render?kroki_server=https://kroki.io" \
 ## Starting the Server
 
 ```bash
-# Locally (requires pandoc + tools installed)
-pandia-serve 3300
+# Directly with Node.js (requires pandoc + tools installed)
+node pandia-server.mjs
 
-# Via Docker/Podman (all tools included)
-docker run -d -p 3300:3300 yaccob/pandia pandia-serve 3300
+# Custom port via environment variable
+PANDIA_PORT=8080 node pandia-server.mjs
 ```
 
 ## Architecture
@@ -73,8 +73,8 @@ POST /render (Markdown body)
 ## Local Development
 
 ```bash
-npm install          # Install diagram renderer dependencies
-pandia-serve 3300    # Start server
+npm install                # Install diagram renderer dependencies
+node pandia-server.mjs     # Start server (default port 3300)
 ```
 
 Requires: Node.js, pandoc, and diagram tools (plantuml, graphviz, mermaid-cli, etc.).

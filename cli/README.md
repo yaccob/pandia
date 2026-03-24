@@ -55,13 +55,40 @@ pandia -t pdf -o report.pdf myfile.md
 ### Server Mode
 
 ```bash
-# Start a server (locally or via Docker)
-pandia-serve 3300
-docker run -d -p 3300:3300 yaccob/pandia pandia-serve 3300
-
 # Render via server
 pandia --server http://localhost:3300 myfile.md > output.html
 pandia --server http://localhost:3300 -t pdf -o output.pdf myfile.md
+```
+
+## pandia-serve
+
+Convenience wrapper to start a pandia server.
+
+```
+pandia-serve [OPTIONS] [PORT]
+
+Options:
+  --kroki-server URL    Kroki server URL for additional diagram types
+  -h, --help            Show this help
+
+Environment:
+  PANDIA_KROKI_URL      Alternative to --kroki-server
+  PANDIA_PORT           Alternative to PORT argument (default: 3300)
+```
+
+```bash
+# Start server on default port 3300
+pandia-serve
+
+# Custom port
+pandia-serve 8080
+
+# With Kroki for additional diagram types
+pandia-serve --kroki-server https://kroki.io
+
+# Via Docker
+docker run -d -p 3300:3300 yaccob/pandia pandia-serve
+docker run -d -p 3300:3300 yaccob/pandia pandia-serve --kroki-server https://kroki.io
 ```
 
 ### Watch Mode

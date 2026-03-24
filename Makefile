@@ -4,7 +4,7 @@ PDF      := $(SRC:.md=.pdf)
 HTML     := $(SRC:.md=.html)
 IMGDIR   := img
 IMAGE    := yaccob/pandia
-VERSION  := 1.6.0
+VERSION  := 1.7.0
 CONTAINER_RT := $(shell which podman 2>/dev/null || which docker 2>/dev/null)
 TEST_PORT := 13301
 TEST_CONTAINER := pandia-test-all

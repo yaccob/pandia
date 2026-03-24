@@ -9,8 +9,9 @@ date: 2026-03-17
 This document demonstrates embedding **PlantUML** (including **EBNF**),
 **Graphviz**, **Mermaid**, **Markmap**, **Ditaa**, **TikZ**, **Directory Trees**,
 and **LaTeX formulas** in a Markdown document.
-With `--kroki`, additional diagram types like **BPMN**, **D2**, **ERD**,
-**Svgbob**, **WaveDrom**, **Nomnoml**, and **Pikchr** are available.
+With `--kroki-server URL`, additional diagram types like **BPMN**, **ERD**,
+**Svgbob**, and **Pikchr** are available. **D2**, **WaveDrom**, **Nomnoml**,
+and **DBML** are rendered natively but also available via Kroki as fallback.
 
 ---
 
@@ -420,7 +421,7 @@ Server: {
 ## Kroki-powered Diagrams
 
 The following diagrams are rendered via [Kroki](https://kroki.io) and require
-`--kroki` or `--kroki-server URL`. They are ignored without Kroki enabled.
+`--kroki-server URL`. They are ignored without Kroki enabled.
 
 ### BPMN – Business Process
 
@@ -656,12 +657,12 @@ $$a_{n+1} = \begin{cases} \frac{a_n}{2} & \text{if } a_n \text{ is even} \\ 3a_n
 | Ditaa     | `` ```ditaa ``      | Local           |
 | TikZ      | `` ```tikz ``       | Local           |
 | Dir Tree  | `` ```dir ``        | Local (SVG)     |
+| D2        | `` ```d2 ``         | Local / Kroki   |
+| DBML      | `` ```dbml ``       | Local / Kroki   |
+| Nomnoml   | `` ```nomnoml ``    | Local / Kroki   |
+| WaveDrom  | `` ```wavedrom ``   | Local / Kroki   |
 | BPMN      | `` ```bpmn ``       | Kroki           |
-| D2        | `` ```d2 ``         | Kroki           |
-| DBML      | `` ```dbml ``       | Kroki           |
 | ERD       | `` ```erd ``        | Kroki           |
 | Svgbob    | `` ```svgbob ``     | Kroki           |
-| WaveDrom  | `` ```wavedrom ``   | Kroki           |
-| Nomnoml   | `` ```nomnoml ``    | Kroki           |
 | Pikchr    | `` ```pikchr ``     | Kroki           |
 | LaTeX     | `$...$` / `$$...$$` | Pandoc native  |
