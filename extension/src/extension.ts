@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { PandiaClient } from './client';
-import { patchHtmlForWebview } from './html-patch';
 
 let previewPanel: vscode.WebviewPanel | undefined;
 let client: PandiaClient | undefined;
@@ -36,7 +35,7 @@ async function updatePreview(document: vscode.TextDocument) {
       math: 'mathml',
     });
     if (previewPanel) {
-      previewPanel.webview.html = patchHtmlForWebview(html);
+      previewPanel.webview.html = html;
     }
   } catch (err: any) {
     if (previewPanel) {

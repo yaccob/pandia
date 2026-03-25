@@ -80,11 +80,21 @@ async function render (content, { format = 'html', math = 'mathml', maxwidth = '
   // the <math> tags client-side and replaces them with its own rendering.
   const outfile = join(workdir, 'output.html')
   cmd += ` --embed-resources --to=html5 --mathml`
-  const cssRules = ['svg{max-width:100%;height:auto!important}', '.markmap-container svg{height:100%!important}']
+  const cssRules = [
+    // SVG diagrams: white background for readability on any theme, responsive scaling
+    'svg{background:#fff;border-radius:4px;padding:8px;max-width:100%;height:auto!important}',
+    // Markmap SVGs fill their container (server-measured height)
+    '.markmap-container svg{height:100%!important;background:none;padding:0}',
+    // Math: proper fonts
+    'math,math *{font-family:"STIX Two Math","STIX Two Text",STIXGeneral,"Cambria Math","Latin Modern Math",serif}',
+  ]
   if (!center_math) {
     cssRules.push('math[display=block]{display:block!important;text-align:left!important}')
   }
-  cmd += ` -V "header-includes=<style>${cssRules.join('')}</style>"`
+  // Write CSS to a file to avoid shell-escaping issues with quotes in font names
+  const headerFile = join(workdir, 'header.html')
+  writeFileSync(headerFile, `<style>\n${cssRules.join('\n')}\n</style>`)
+  cmd += ` -H "${headerFile}"`
   cmd += ` -V maxwidth="${maxwidth}"`
   cmd += ` -o "${outfile}" "${infile}"`
 

@@ -682,14 +682,15 @@ test_markmap_auto_fit() {
   local out
   out=$(cat "$tmpdir/out")
   rm -rf "$tmpdir"
-  # Must contain fitContainer script for client-side height adjustment
-  assert_contains "$out" "fitContainer" \
-    "Markmap HTML includes fitContainer script for auto-sizing"
-  assert_contains "$out" "getBBox" \
-    "Markmap fitContainer uses getBBox to measure rendered content"
-  # After resizing, must call fit() to re-center the tree in the new container
-  assert_contains "$out" ".fit()" \
-    "Markmap calls fit() after resize to keep content visible"
+  # Must contain Markmap.create call (markmap-view's own rendering)
+  assert_contains "$out" "Markmap.create" \
+    "Markmap HTML includes Markmap.create call"
+  # Must NOT contain fitContainer (server handles sizing, no client-side adjustment)
+  if echo "$out" | grep -q "fitContainer"; then
+    fail "Markmap HTML must not contain fitContainer (server-side sizing only)"
+  else
+    pass "Markmap HTML has no fitContainer (server-side sizing only)"
+  fi
 }
 test_markmap_auto_fit
 
