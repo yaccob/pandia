@@ -163,11 +163,24 @@ async function releaseBrowser ({ browser, shared }) {
   else await browser.close()
 }
 
-async function measureMarkmapHeight (root, assets) {
-  // Render in headless browser to measure the exact content height
-  const { fillTemplate } = await importMarkmap()
-  // Inline local JS files to avoid CDN latency during headless measurement
-  const html = inlineLocalAssets(fillTemplate(root, assets))
+async function measureMarkmapLayout (root, scriptUrls) {
+  // Render with Markmap.create in a tall container, then read the g element's
+  // bounding box and scale factor. Returns { height, translateX, topY, scale }
+  // so the fragment can set the container height and top-align the tree.
+  const localAssets = findLocalAssets()
+  let scriptTags = ''
+  if (localAssets) {
+    scriptTags += `<script>${readFileSync(localAssets.d3, 'utf-8')}</script>\n`
+    scriptTags += `<script>${readFileSync(localAssets.mmView, 'utf-8')}</script>`
+  } else {
+    for (const url of scriptUrls) scriptTags += `<script src="${url}"></script>\n`
+  }
+
+  const html = `<!DOCTYPE html><html><head><style>body{margin:0;background:#fff}</style></head><body>
+<div style="width:960px;height:4000px"><svg id="mm" style="width:100%;height:100%"></svg></div>
+${scriptTags}
+<script>markmap.Markmap.create("svg#mm", null, ${JSON.stringify(root)});</script>
+</body></html>`
 
   const tmpHtml = join(tmpdir(), `markmap-measure-${Date.now()}.html`)
   writeFileSync(tmpHtml, html)
@@ -175,11 +188,11 @@ async function measureMarkmapHeight (root, assets) {
   const puppeteer = await loadPuppeteer()
   const handle = await acquireBrowser(puppeteer)
   const page = await handle.browser.newPage()
-  await page.setViewport({ width: 1200, height: 800 })
+  await page.setViewport({ width: 960, height: 4000 })
   await page.goto(`file://${resolve(tmpHtml)}`, { waitUntil: 'networkidle0' })
 
   try {
-    await page.waitForSelector('svg#mindmap g', { timeout: 10000 })
+    await page.waitForSelector('svg#mm g', { timeout: 10000 })
   } catch {
     await page.close()
     await releaseBrowser(handle)
@@ -188,18 +201,64 @@ async function measureMarkmapHeight (root, assets) {
   }
   await new Promise(r => setTimeout(r, 500))
 
-  const height = await page.evaluate(() => {
-    const svg = document.querySelector('svg#mindmap')
-    const g = svg && svg.querySelector('g')
+  // Screenshot and measure the 80% content window (ignoring sparse connector lines)
+  const clip = { x: 0, y: 0, width: 960, height: 4000 }
+  const imgData = await page.screenshot({ clip, encoding: 'base64' })
+
+  const layout = await page.evaluate((imgData) => {
+    const g = document.querySelector('svg#mm g')
     if (!g) return null
     const bbox = g.getBBox()
-    return Math.ceil(bbox.height + 40)
-  })
+    const transform = g.getAttribute('transform') || ''
+    const scaleMatch = transform.match(/scale\(([\d.]+)\)/)
+    const translateMatch = transform.match(/translate\(([\d.]+)\s*,\s*([\d.]+)\)/)
+    const scale = scaleMatch ? parseFloat(scaleMatch[1]) : 1
+    const tx = translateMatch ? parseFloat(translateMatch[1]) : 0
+
+    return new Promise(resolve => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width; canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0)
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+        const w = canvas.width, h = canvas.height
+        const rowCounts = []; let total = 0
+        for (let y = 0; y < h; y++) {
+          let count = 0
+          for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4
+            if ((255 - pixels[i]) + (255 - pixels[i+1]) + (255 - pixels[i+2]) > 30) count++
+          }
+          rowCounts.push(count); total += count
+        }
+        if (total === 0) { resolve(null); return }
+
+        // 80% content window
+        const target = total * 0.80
+        let bestStart = 0, bestEnd = h - 1, bestSpan = h, wSum = 0, s = 0
+        for (let e = 0; e < h; e++) {
+          wSum += rowCounts[e]
+          while (wSum >= target && s <= e) {
+            if (e - s + 1 < bestSpan) { bestSpan = e - s + 1; bestStart = s; bestEnd = e }
+            wSum -= rowCounts[s++]
+          }
+        }
+        // topY: position tree so 80% content window starts at 20px from top
+        const topY = Math.round(-bbox.y * scale - bestStart + 20)
+        // utilization = fraction of container actually used by content
+        const utilization = bestSpan / 4000
+        resolve({ height: bestSpan + 40, utilization, scale, translateX: tx })
+      }
+      img.src = 'data:image/png;base64,' + imgData
+    })
+  }, imgData)
 
   await page.close()
   await releaseBrowser(handle)
   try { unlinkSync(tmpHtml) } catch {}
-  return height
+  return layout
 }
 
 async function generateHtmlFragment (content, id) {
@@ -211,10 +270,6 @@ async function generateHtmlFragment (content, id) {
   // Build a self-contained HTML fragment with unique IDs
   const containerId = `markmap-${id}`
   const jsonData = JSON.stringify(root)
-
-  // Measure exact height by rendering in headless browser
-  const measuredHeight = await measureMarkmapHeight(root, assets)
-  const containerHeight = measuredHeight || 400
 
   // Extract script URLs from assets
   const scriptUrls = []
@@ -233,32 +288,30 @@ async function generateHtmlFragment (content, id) {
     )
   }
 
-  const fragment = `<div class="markmap-container" id="container-${containerId}" style="height:${containerHeight}px;margin:1em 0">
+  // Measure layout: visible content height and the whitespace offset
+  const layout = await measureMarkmapLayout(root, scriptUrls)
+  // The visible container height (what the user sees)
+  const visibleHeight = layout ? layout.height : 400
+  // Markmap uses ~60-70% of available space and centers. Give markmap enough
+  // inner space so the content fills the visible container, then crop.
+  // Small trees need more inner space (less efficient packing by markmap)
+  const factor = visibleHeight < 300 ? 2.8 : 1.8
+  const innerHeight = Math.ceil(visibleHeight * factor)
+  const shiftUp = Math.round((innerHeight - visibleHeight) * 0.6)
+
+  const fragment = `<div class="markmap-container" id="container-${containerId}" style="height:${visibleHeight}px;margin:1em 0;overflow:hidden">
+<div style="height:${innerHeight}px;margin-top:-${shiftUp}px">
 <svg id="${containerId}" style="width:100%;height:100%"></svg>
+</div>
 </div>
 <script>
 (function(){
   var scripts = ${JSON.stringify(scriptUrls)};
   var loaded = 0;
-  function fitContainer() {
-    var svg = document.querySelector("svg#${containerId}");
-    var g = svg && svg.querySelector("g");
-    if (!g) return;
-    var bbox = g.getBBox();
-    var height = Math.ceil(bbox.height + 40);
-    var container = document.getElementById("container-${containerId}");
-    if (container) container.style.height = height + "px";
-  }
-  var instance;
   function onReady() {
-    var data = ${jsonData};
     var mm = window.markmap;
     if (mm && mm.Markmap) {
-      instance = mm.Markmap.create("svg#${containerId}", mm.deriveOptions ? mm.deriveOptions() : null, data);
-      setTimeout(function() {
-        fitContainer();
-        if (instance && instance.fit) instance.fit();
-      }, 500);
+      mm.Markmap.create("svg#${containerId}", mm.deriveOptions ? mm.deriveOptions() : null, ${jsonData});
     }
   }
   function loadNext() {

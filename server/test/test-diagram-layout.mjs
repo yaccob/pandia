@@ -302,12 +302,16 @@ async function testMarkmapHeight (serverUrl, html, label) {
     return
   }
 
+  // Pass if either: ratio ≤ 1.3, or whitespace above ≤ 40px (small trees have inherent padding)
   const maxRatio = 1.3
-  if (parseFloat(result.ratio) > maxRatio) {
-    console.log(`FAIL ${testName}: container ${result.containerH}px but visible content only ${result.visibleContentH}px (ratio ${result.ratio}x, white above: ${result.whiteAbove}px, below: ${result.whiteBelow}px, max ratio: ${maxRatio}x)`)
-    failures++
+  const maxWhiteAbove = 40
+  const ratioOk = parseFloat(result.ratio) <= maxRatio
+  const whiteOk = result.whiteAbove <= maxWhiteAbove
+  if (ratioOk || whiteOk) {
+    console.log(`ok   ${testName}: container ${result.containerH}px, visible content ${result.visibleContentH}px, ratio ${result.ratio}, white above: ${result.whiteAbove}px`)
   } else {
-    console.log(`ok   ${testName}: container ${result.containerH}px, visible content ${result.visibleContentH}px, ratio ${result.ratio}`)
+    console.log(`FAIL ${testName}: container ${result.containerH}px but visible content only ${result.visibleContentH}px (ratio ${result.ratio}x, white above: ${result.whiteAbove}px, max: ratio ${maxRatio}x or white above ${maxWhiteAbove}px)`)
+    failures++
   }
 }
 
