@@ -72,15 +72,6 @@ paths:
             type: string
             enum: ['true', 'false']
             default: 'false'
-        - name: kroki_server
-          in: query
-          required: false
-          description: |
-            Kroki server URL for rendering additional diagram types
-            (BPMN, ERD, Pikchr, etc.)
-          schema:
-            type: string
-          example: https://kroki.io
       requestBody:
         required: true
         description: Raw Markdown content

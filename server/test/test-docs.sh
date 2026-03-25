@@ -182,7 +182,7 @@ fi
 section "docs: diagram types in README"
 
 # Core types listed in --help
-help_types="plantuml graphviz mermaid markmap ditaa tikz nomnoml dbml d2 wavedrom dir"
+help_types="plantuml graphviz mermaid markmap tikz nomnoml dbml d2 wavedrom dir"
 for dtype in $help_types; do
   if grep -qiF "$dtype" "$README"; then
     PASS=$((PASS + 1))

@@ -89,14 +89,12 @@ pandia --center-math -t pdf -o report.pdf myfile.md
 Convenience wrapper to start a pandia server.
 
 ```
-pandia-serve [OPTIONS] [PORT]
+pandia-serve [PORT]
 
 Options:
-  --kroki-server URL    Kroki server URL for additional diagram types
   -h, --help            Show this help
 
 Environment:
-  PANDIA_KROKI_URL      Alternative to --kroki-server
   PANDIA_PORT           Alternative to PORT argument (default: 3300)
 ```
 
@@ -107,10 +105,6 @@ pandia-serve
 # Custom port
 pandia-serve 8080
 
-# With Kroki for additional diagram types
-pandia-serve --kroki-server https://kroki.io
-
 # Via Docker
 docker run -d -p 3300:3300 yaccob/pandia pandia-serve
-docker run -d -p 3300:3300 yaccob/pandia pandia-serve --kroki-server https://kroki.io
 ```

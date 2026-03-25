@@ -33,7 +33,7 @@ function ng (msg, detail) {
 // 1. A <rect fill="white"> as first child after <svg> (pandia-injected)
 // 2. A style="...background:#FFFFFF..." on the <svg> tag itself (PlantUML)
 // 3. A <polygon fill="white"> as first visual element (Graphviz, inside <g>)
-// 4. A <rect fill="#FFFFFF"> as first visual element (D2, Kroki)
+// 4. A <rect fill="#FFFFFF"> as first visual element (D2)
 function svgHasOpaqueBackground (svgContent) {
   // Check 1: <rect fill="white"> as first child
   const afterSvg = svgContent.replace(/^[\s\S]*?<svg[^>]*>/, '')

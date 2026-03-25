@@ -20,7 +20,6 @@ Accepts raw Markdown as the request body, returns rendered HTML or PDF.
 | `math` | `mathjax`, `mathml` | `mathml` | Math rendering engine |
 | `maxwidth` | CSS value | `60em` | Max content width (HTML) |
 | `center_math` | `true`, `false` | `false` | Center display math |
-| `kroki_server` | URL | — | Kroki server for extra diagram types |
 
 ```bash
 # Render to HTML
@@ -30,10 +29,6 @@ curl -X POST http://localhost:3300/render \
 # Render to PDF
 curl -X POST "http://localhost:3300/render?format=pdf" \
   --data-binary @myfile.md > output.pdf
-
-# With Kroki diagrams
-curl -X POST "http://localhost:3300/render?kroki_server=https://kroki.io" \
-  --data-binary @myfile.md > output.html
 ```
 
 ## Starting the Server
@@ -55,7 +50,6 @@ POST /render (Markdown body)
         → PlantUML, Graphviz, Mermaid, TikZ, ... (concurrent subprocesses)
         → diagram-renderer.mjs (Nomnoml, DBML, D2, WaveDrom)
         → markmap-render.mjs (Markmap)
-        → Kroki HTTP (BPMN, ERD, Pikchr, ...)
     → HTML (self-contained, inline SVGs) or PDF
 ```
 

@@ -29,13 +29,12 @@ function startMockServer () {
           const format = url.searchParams.get('format') || 'html'
           const math = url.searchParams.get('math') || 'mathjax'
           const maxwidth = url.searchParams.get('maxwidth') || '60em'
-          const kroki = url.searchParams.get('kroki_server') || ''
           if (format === 'pdf') {
             res.writeHead(200, { 'Content-Type': 'application/pdf' })
             return res.end('%PDF-mock')
           }
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-          res.end(`<html><body style="max-width:${maxwidth}" data-math="${math}" data-kroki="${kroki}"><h1>Mock</h1><p>${body}</p></body></html>`)
+          res.end(`<html><body style="max-width:${maxwidth}" data-math="${math}"><h1>Mock</h1><p>${body}</p></body></html>`)
         })
         return
       }
@@ -94,12 +93,6 @@ describe('PandiaClient', () => {
     const client = new PandiaClient(`http://localhost:${mockPort}`)
     const html = await client.render('# Test', { maxwidth: '40em' })
     assert.ok(html.includes('40em'))
-  })
-
-  it('render passes kroki_server parameter', async () => {
-    const client = new PandiaClient(`http://localhost:${mockPort}`)
-    const html = await client.render('# Test', { kroki_server: 'https://kroki.io' })
-    assert.ok(html.includes('data-kroki="https://kroki.io"'))
   })
 
   it('render throws on empty content', async () => {

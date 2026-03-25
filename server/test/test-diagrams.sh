@@ -159,35 +159,6 @@ test_tikz_invalid_syntax() {
 }
 test_tikz_invalid_syntax
 
-# --- Ditaa ------------------------------------------------------------
-
-section "ditaa: happy path"
-
-test_ditaa_basic() {
-  local input='```ditaa
-+--------+   +-------+
-|        |-->|       |
-| cBLU   |   | cGRE  |
-+--------+   +-------+
-```'
-  local out
-  out=$(run_filter_isolated "$input")
-  assert_contains "$out" "<img" "Ditaa generates image element"
-  assert_contains "$out" "ditaa-" "Image uses ditaa prefix"
-  assert_contains "$out" ".png" "Ditaa uses PNG format"
-}
-test_ditaa_basic
-
-section "ditaa: error cases"
-
-test_ditaa_empty() {
-  local input='```ditaa
-```'
-  run_filter_isolated_both "$input"
-  assert_contains "$LAST_STDOUT" "<img" "Ditaa empty block still produces image (PlantUML wrapper)"
-}
-test_ditaa_empty
-
 # --- Unknown type -----------------------------------------------------
 
 section "unknown diagram type"
@@ -258,19 +229,6 @@ test_pdf_tikz() {
 }
 test_pdf_tikz
 
-test_pdf_ditaa() {
-  local input='```ditaa
-+---+
-| A |
-+---+
-```'
-  run_filter_pdf_keep "$input"
-  local found
-  found=$(ls "$WORK_DIR"/img/ditaa-*.png 2>/dev/null | head -1) || true
-  assert_file_exists "${found:-/nonexistent}" "Ditaa produces PNG file for PDF output (always PNG)"
-  teardown_workdir
-}
-test_pdf_ditaa
 
 # --- Captions ---------------------------------------------------------
 
@@ -704,35 +662,6 @@ Bob -> Alice: Hi
 }
 test_plantuml_no_preserveaspectratio_none
 
-# --- Node renderer: kroki fallback ---
-
-section "node renderer: kroki fallback for missing tools"
-
-test_d2_falls_back_to_kroki() {
-  local input='```d2
-x -> y -> z
-```'
-  local tmpdir
-  tmpdir=$(mktemp -d)
-  echo "$input" | PANDIA_KROKI_URL=https://kroki.io pandoc --lua-filter="$FILTER" --from=gfm -t html5 2>"$tmpdir/err" > "$tmpdir/out" || true
-  local out err
-  out=$(cat "$tmpdir/out")
-  err=$(cat "$tmpdir/err")
-  rm -rf "$tmpdir"
-  assert_not_contains "$err" "command not found" \
-    "d2 must not fail with 'command not found' when kroki available"
-  assert_not_contains "$err" "rendering failed" \
-    "d2 must not report rendering failed when kroki available"
-  assert_contains "$out" "<img" \
-    "d2 produces image via kroki fallback"
-}
-# Only run if d2 is NOT installed locally (tests the fallback path)
-if ! command -v d2 >/dev/null 2>&1; then
-  test_d2_falls_back_to_kroki
-else
-  printf "  ${GREEN}SKIP${RESET} d2 kroki fallback: d2 installed locally\n"
-fi
-
 # --- Markmap container height ---
 
 section "markmap: HTML container height"
@@ -860,16 +789,6 @@ test_example_md_all_diagrams() {
   else
     FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "example.md: Markmap NOT rendered"
     ERRORS="${ERRORS}\n  FAIL: example.md Markmap not rendered"
-  fi
-
-  # Ditaa
-  local has_ditaa
-  has_ditaa=$(echo "$out" | sed -n "/Ditaa/,/^<h[0-9]/p" | grep -c '<img' || true)
-  if [[ "$has_ditaa" -gt 0 ]]; then
-    PASS=$((PASS + 1)); printf "  ${GREEN}PASS${RESET} %s\n" "example.md: Ditaa rendered"
-  else
-    FAIL=$((FAIL + 1)); printf "  ${RED}FAIL${RESET} %s\n" "example.md: Ditaa NOT rendered"
-    ERRORS="${ERRORS}\n  FAIL: example.md Ditaa not rendered"
   fi
 
   # TikZ

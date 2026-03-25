@@ -56,15 +56,12 @@ test_render markmap '# Root
 ## A
 ## B'
 
-printf "\n${BOLD}container: /render kroki${RESET}\n"
-test_render pikchr 'box "A"; arrow; box "B"' "?kroki_server=https://kroki.io"
-
 # --- POST /render example.md completeness ---
 
 printf "\n${BOLD}container: /render example.md completeness${RESET}\n"
 
-# Render example.md via /render (read from /data volume)
-curl -sf -X POST "http://localhost:${PORT}/render?kroki_server=https://kroki.io" \
+# Render example.md via /render
+curl -sf -X POST "http://localhost:${PORT}/render" \
   --data-binary @"$PROJECT_DIR/docs/example.md" > example-container.html 2>&1 || fail "/render example.md"
 sleep 1
 
@@ -86,7 +83,6 @@ check_render_section "graphviz--directed-graph" "Directed Graph"
 check_render_section "graphviz--state-machine" "State Machine"
 check_render_section "mermaid--flowchart" "Mermaid Flowchart"
 check_render_section "mermaid--gantt-chart" "Mermaid Gantt"
-check_render_section "ditaa--ascii-art" "Ditaa"
 check_render_section "tikz--vector-drawing" "TikZ"
 check_render_section "nomnoml--uml-diagrams" "Nomnoml"
 check_render_section "dbml--database-schema" "DBML"
@@ -98,10 +94,6 @@ if grep -q 'markmap-container' example-container.html; then
 else
   fail "/render Markmap not rendered"
 fi
-# Kroki sections
-check_render_section "bpmn--business" "BPMN (kroki)"
-check_render_section "entity-relationship" "ERD (kroki)"
-check_render_section "pikchr--technical" "Pikchr (kroki)"
 # No unrendered diagram code blocks
 unrendered=$(grep -o '<pre class="[^"]*"' example-container.html | grep -v 'sourceCode\|code-block' || true)
 if [[ -z "$unrendered" ]]; then

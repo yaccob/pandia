@@ -1,27 +1,22 @@
 # pandia
 
 Markdown to PDF/HTML with built-in support for diagrams and LaTeX math.
-Most diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zoom level.
+All diagrams render as **vector graphics** (PDF/SVG) for crisp output at any zoom level.
 
 ## Supported Diagram Types
 
-| Type | Syntax | Rendering | Availability |
-|------|--------|-----------|--------------|
-| PlantUML | `` ```plantuml `` | Vector (PDF/SVG) | Local + Container |
-| Graphviz | `` ```graphviz `` | Vector (PDF/SVG) | Local + Container |
-| Mermaid | `` ```mermaid `` | Vector (PDF/SVG) | Local + Container |
-| Markmap | `` ```markmap `` | Interactive HTML / Vector PDF | Local + Container |
-| Ditaa | `` ```ditaa `` | Raster (PNG) | Local + Container |
-| TikZ | `` ```tikz `` | Vector (PDF/SVG) | Local + Container |
-| Nomnoml | `` ```nomnoml `` | Vector (PDF/SVG) | Local + Container |
-| DBML | `` ```dbml `` | Vector (PDF/SVG) | Local + Container |
-| D2 | `` ```d2 `` | Vector (PDF/SVG) | Local + Container |
-| WaveDrom | `` ```wavedrom `` | Vector (PDF/SVG) | Local + Container |
-| Dir Tree | `` ```dir `` | Vector (SVG) | Local + Container |
-| BPMN | `` ```bpmn `` | Vector (PDF/SVG) | Via Kroki |
-| ERD | `` ```erd `` | Vector (PDF/SVG) | Via Kroki |
-| Pikchr | `` ```pikchr `` | Vector (PDF/SVG) | Via Kroki |
-| Svgbob | `` ```svgbob `` | Vector (PDF/SVG) | Via Kroki |
+| Type | Syntax | Notes |
+|------|--------|-------|
+| PlantUML | `` ```plantuml `` | incl. C4, EBNF, Salt |
+| Graphviz | `` ```graphviz `` | |
+| Mermaid | `` ```mermaid `` | |
+| Markmap | `` ```markmap `` | Interactive in HTML |
+| TikZ | `` ```tikz `` | |
+| Nomnoml | `` ```nomnoml `` | |
+| DBML | `` ```dbml `` | |
+| D2 | `` ```d2 `` | |
+| WaveDrom | `` ```wavedrom `` | |
+| Dir Tree | `` ```dir `` | pandia native |
 
 LaTeX math (`$...$` inline, `$$...$$` block) is supported natively via Pandoc.
 

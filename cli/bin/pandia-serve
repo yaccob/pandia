@@ -7,24 +7,20 @@ usage() {
   cat <<EOF
 pandia-serve v${VERSION} — Start the pandia HTTP rendering server
 
-Usage: pandia-serve [OPTIONS] [PORT]
+Usage: pandia-serve [PORT]
 
 Options:
-  --kroki-server URL    Kroki server URL for additional diagram types
   -h, --help            Show this help
 
 Environment:
-  PANDIA_KROKI_URL      Alternative to --kroki-server
   PANDIA_PORT           Alternative to PORT argument (default: 3300)
 
 Examples:
-  pandia-serve                              # listen on port 3300
-  pandia-serve 8080                         # listen on port 8080
-  pandia-serve --kroki-server https://kroki.io
+  pandia-serve                        # listen on port 3300
+  pandia-serve 8080                   # listen on port 8080
 
 Docker:
   docker run -d -p 3300:3300 yaccob/pandia pandia-serve
-  docker run -d -p 3300:3300 -e PANDIA_KROKI_URL=http://kroki:8000 yaccob/pandia pandia-serve
 
 API:
   POST /render    Markdown body → HTML or PDF response
@@ -36,20 +32,14 @@ EOF
 }
 
 PORT=""
-KROKI_URL="${PANDIA_KROKI_URL:-}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --kroki-server) KROKI_URL="$2"; shift 2 ;;
     -h|--help)      usage ;;
     -*)             echo "Unknown option: $1" >&2; usage ;;
     *)              PORT="$1"; shift ;;
   esac
 done
-
-if [ -n "$KROKI_URL" ]; then
-  export PANDIA_KROKI_URL="$KROKI_URL"
-fi
 
 if [ -n "$PORT" ]; then
   export PANDIA_PORT="$PORT"

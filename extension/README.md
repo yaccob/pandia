@@ -5,7 +5,7 @@ Live preview for Markdown documents with embedded diagrams and LaTeX math.
 ## Features
 
 - **Live preview** — updates automatically as you type (debounced)
-- **All pandia diagram types** — PlantUML, Graphviz, Mermaid, Markmap, Nomnoml, DBML, D2, WaveDrom, TikZ, Ditaa, Directory Trees
+- **All pandia diagram types** — PlantUML, Graphviz, Mermaid, Markmap, Nomnoml, DBML, D2, WaveDrom, TikZ, Directory Trees
 - **Interactive Markmap** — mind maps are expandable/collapsible in the preview
 - **LaTeX math** — rendered server-side as MathML (no JavaScript needed)
 - **Theme-aware** — adapts to your VS Code color theme (light/dark)

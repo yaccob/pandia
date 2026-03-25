@@ -1,12 +1,12 @@
 -- Pandoc Lua filter: renders diagram code blocks to images
--- Supported locally: plantuml, graphviz/dot, mermaid, ditaa, tikz
--- With --kroki: additionally all Kroki-supported types (d2, bpmn, etc.)
+-- Supported: plantuml, graphviz/dot, mermaid, tikz, markmap,
+--   nomnoml, dbml, d2, wavedrom, dir
 -- LaTeX math is handled natively by pandoc
 --
--- For PDF output: vector graphics (PDF) where possible, PNG only for ditaa
--- For HTML output: SVG where possible, PNG for ditaa and tikz
+-- For PDF output: vector graphics (PDF) everywhere
+-- For HTML output: SVG everywhere (TikZ via dvisvgm/pdftocairo)
 --
--- All diagram tool groups run concurrently. PlantUML, ditaa, and mermaid
+-- All diagram tool groups run concurrently. PlantUML and mermaid
 -- diagrams are batched to avoid repeated JVM/Chromium startup overhead.
 -- Set MERMAID_SERVER=http://host:port to use a persistent render server
 -- instead of mmdc batch mode (used in container for watch mode).
@@ -23,8 +23,6 @@ local mmdc_extra = mmdc_puppeteer and (" -p " .. mmdc_puppeteer) or ""
 -- Optional mermaid server (container mode)
 local mermaid_server = os.getenv("MERMAID_SERVER")
 
--- Kroki server (set via --kroki / --kroki-server)
-local kroki_server = os.getenv("PANDIA_KROKI_URL")
 
 -- Ensure an SVG has a white background. Injects a white rect as the first
 -- child of the root <svg>, so diagram content (rendered later) draws on top.
@@ -50,10 +48,10 @@ local function ensure_svg_background(svg)
   return svg:gsub('(<svg[^>]*>)', '%1\n' .. bg_rect, 1)
 end
 
--- Local tool types (rendered without Kroki)
+-- Local tool types
 local local_tools = {
   plantuml = true, graphviz = true, dot = true,
-  mermaid = true, ditaa = true, tikz = true,
+  mermaid = true, tikz = true,
   markmap = true,
 }
 
@@ -99,16 +97,6 @@ local function node_renderer_available(dtype)
   return avail
 end
 
--- All Kroki-supported diagram types
-local kroki_types = {
-  actdiag = true, blockdiag = true, bpmn = true, bytefield = true,
-  c4plantuml = true, d2 = true, dbml = true, ditaa = true,
-  erd = true, excalidraw = true, graphviz = true, dot = true,
-  mermaid = true, nomnoml = true, nwdiag = true, packetdiag = true,
-  pikchr = true, plantuml = true, rackdiag = true, seqdiag = true,
-  structurizr = true, svgbob = true, symbolator = true, tikz = true,
-  vega = true, vegalite = true, wavedrom = true, wireviz = true,
-}
 
 local function ensure_imgdir()
   os.execute("mkdir -p " .. imgdir)
@@ -214,23 +202,6 @@ local function prepare_mermaid(code)
   }
 end
 
-local function prepare_ditaa(code)
-  ensure_imgdir()
-  filecounter = filecounter + 1
-  local basename = imgdir .. "/ditaa-" .. filecounter
-  local wrapped = "@startditaa\n" .. code .. "\n@endditaa"
-  local infile = basename .. ".puml"
-  local f = io.open(infile, "w")
-  f:write(wrapped)
-  f:close()
-
-  return {
-    tool = "ditaa",
-    infile = infile,
-    outfile = basename .. ".png",
-    cleanup = {infile},
-  }
-end
 
 local function prepare_tikz(code)
   ensure_imgdir()
@@ -615,53 +586,6 @@ local function prepare_markmap_pdf(code)
 end
 
 ------------------------------------------------------------------------
--- Kroki rendering: POST diagram source, receive image
-------------------------------------------------------------------------
-
-local function prepare_kroki(code, diagram_type)
-  ensure_imgdir()
-  filecounter = filecounter + 1
-
-  -- Map some aliases to Kroki identifiers
-  local kroki_type = diagram_type
-  if kroki_type == "dot" then kroki_type = "graphviz" end
-
-  local basename = imgdir .. "/kroki-" .. filecounter
-  local infile = basename .. ".txt"
-  local svgfile = basename .. ".svg"
-
-  local f = io.open(infile, "w")
-  f:write(code)
-  f:close()
-
-  -- Always fetch SVG from Kroki (most types only support SVG)
-  local curl_cmd = "curl -sf -X POST"
-    .. " -H 'Content-Type: text/plain'"
-    .. " --data-binary @" .. infile
-    .. " -o " .. svgfile
-    .. " '" .. kroki_server .. "/" .. kroki_type .. "/svg'"
-
-  if is_html then
-    return {
-      tool = "kroki",
-      outfile = svgfile,
-      cmd = curl_cmd,
-      cleanup = {infile},
-    }
-  else
-    -- PDF: fetch SVG, then convert via rsvg-convert
-    local outfile = basename .. ".pdf"
-    return {
-      tool = "kroki",
-      outfile = outfile,
-      cmd = curl_cmd
-        .. " && rsvg-convert -f pdf -o " .. outfile .. " " .. svgfile,
-      cleanup = {infile, svgfile},
-    }
-  end
-end
-
-------------------------------------------------------------------------
 -- Node.js diagram-renderer.mjs (nomnoml, dbml, d2, wavedrom)
 ------------------------------------------------------------------------
 
@@ -745,15 +669,10 @@ local function pass1_CodeBlock(block)
     job = prepare_graphviz(block.text, block.attributes.engine)
   elseif lang == "mermaid" then
     job = prepare_mermaid(block.text)
-  elseif lang == "ditaa" then
-    job = prepare_ditaa(block.text)
   elseif lang == "tikz" then
     job = prepare_tikz(block.text)
   elseif node_renderer_types[lang] and node_renderer_available(lang) then
     job = prepare_node_renderer(block.text, lang)
-  elseif kroki_server and kroki_types[lang] then
-    -- Not available locally but supported by Kroki
-    job = prepare_kroki(block.text, lang)
   end
 
   if not job then return nil end
@@ -807,8 +726,6 @@ local function execute_all()
   -- Collect jobs by tool
   local puml_files = {}
   local puml_jobs = {}
-  local ditaa_files = {}
-  local ditaa_jobs = {}
   local mermaid_jobs = {}
   local other_jobs = {}
 
@@ -816,9 +733,6 @@ local function execute_all()
     if job.tool == "plantuml" then
       table.insert(puml_files, job.infile)
       table.insert(puml_jobs, job)
-    elseif job.tool == "ditaa" then
-      table.insert(ditaa_files, job.infile)
-      table.insert(ditaa_jobs, job)
     elseif job.tool == "mermaid" then
       table.insert(mermaid_jobs, job)
     elseif job.cmd then
@@ -856,19 +770,7 @@ local function execute_all()
     end
   end
 
-  -- Ditaa batch as one background job (one JVM)
-  if #ditaa_files > 0 then
-    local errfile = ditaa_jobs[1].errfile
-    local rcfile = ditaa_jobs[1].rcfile
-    table.insert(parts, "(plantuml -tpng " .. table.concat(ditaa_files, " ")
-      .. " 2>" .. errfile .. "; echo $? >" .. rcfile .. ") &")
-    for _, job in ipairs(ditaa_jobs) do
-      job.errfile = errfile
-      job.rcfile = rcfile
-    end
-  end
-
-  -- Each other tool (graphviz, tikz, kroki) as its own background job
+  -- Each other tool (graphviz, tikz, node renderers) as its own background job
   for _, job in ipairs(other_jobs) do
     table.insert(parts, "(" .. job.cmd .. " 2>" .. job.errfile
       .. "; echo $? >" .. job.rcfile .. ") &")

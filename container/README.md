@@ -17,12 +17,6 @@ docker run --rm -v "$PWD:/data" yaccob/pandia -t pdf -o output.pdf myfile.md
 docker run -d -p 3300:3300 yaccob/pandia pandia-serve 3300
 ```
 
-With Kroki for additional diagram types:
-
-```bash
-docker run -d -p 3300:3300 yaccob/pandia pandia-serve --kroki-server https://kroki.io 3300
-```
-
 ### Health Check
 
 ```bash
@@ -41,7 +35,6 @@ The image (Alpine-based) bundles:
 - **TikZ** (TeX Live, pdflatex, pdftocairo)
 - **Nomnoml**, **DBML**, **WaveDrom** (Node.js)
 - **D2** (Go binary)
-- **Ditaa** (via PlantUML)
 - **librsvg** (rsvg-convert for SVG→PDF)
 
 ## Building

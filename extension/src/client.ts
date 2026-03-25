@@ -6,7 +6,6 @@ export interface RenderOptions {
   math?: 'mathjax' | 'mathml';
   maxwidth?: string;
   center_math?: boolean;
-  kroki_server?: string;
 }
 
 export class PandiaClient {
@@ -35,8 +34,6 @@ export class PandiaClient {
     if (opts.math) params.set('math', opts.math);
     if (opts.maxwidth) params.set('maxwidth', opts.maxwidth);
     if (opts.center_math) params.set('center_math', 'true');
-    if (opts.kroki_server) params.set('kroki_server', opts.kroki_server);
-
     const query = params.toString();
     const path = '/render' + (query ? `?${query}` : '');
 

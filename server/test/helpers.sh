@@ -160,35 +160,6 @@ run_filter_pdf_keep() {
     --from=gfm+tex_math_dollars --to=latex 2>/dev/null) || true
 }
 
-run_filter_kroki() {
-  local input="$1" url="$2"
-  setup_workdir
-  (cd "$WORK_DIR" && export PANDIA_KROKI_URL="$url" && \
-    echo "$input" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html 2>/dev/null)
-  local rc=$?
-  teardown_workdir
-  return $rc
-}
-
-run_filter_kroki_both() {
-  local input="$1" url="$2"
-  setup_workdir
-  local tmpout="$WORK_DIR/_stdout"
-  local tmperr="$WORK_DIR/_stderr"
-  (cd "$WORK_DIR" && export PANDIA_KROKI_URL="$url" && \
-    echo "$input" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t html >"$tmpout" 2>"$tmperr") || true
-  LAST_STDOUT=$(cat "$tmpout")
-  LAST_STDERR=$(cat "$tmperr")
-  teardown_workdir
-}
-
-run_filter_kroki_pdf_keep() {
-  local input="$1" url="$2"
-  setup_workdir
-  (cd "$WORK_DIR" && export PANDIA_KROKI_URL="$url" && \
-    echo "$input" | pandoc --lua-filter=diagram-filter.lua --from=gfm -t latex 2>/dev/null) || true
-}
-
 # Detect container runtime
 CONTAINER_RT=""
 if command -v podman >/dev/null 2>&1; then

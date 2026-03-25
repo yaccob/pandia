@@ -11,7 +11,6 @@
 //       math          — mathml (default) or mathjax
 //       maxwidth      — max content width for HTML (default: 60em)
 //       center_math   — true to center display math (default: left-aligned)
-//       kroki_server  — Kroki server URL for additional diagram types
 //     Response: rendered HTML or PDF (direct content, not JSON)
 //
 //   GET /health → 200 "ok"
@@ -52,7 +51,7 @@ function readRawBody (req) {
   })
 }
 
-async function render (content, { format = 'html', math = 'mathml', maxwidth = '60em', center_math = false, kroki_server } = {}) {
+async function render (content, { format = 'html', math = 'mathml', maxwidth = '60em', center_math = false } = {}) {
   const id = randomBytes(6).toString('hex')
   const workdir = join(tmpdir(), `pandia-render-${id}`)
   mkdirSync(workdir, { recursive: true })
@@ -61,7 +60,6 @@ async function render (content, { format = 'html', math = 'mathml', maxwidth = '
   writeFileSync(infile, content)
 
   const env = { ...process.env, PANDIA_PARALLEL: '1' }
-  if (kroki_server) env.PANDIA_KROKI_URL = kroki_server
 
   let cmd = `pandoc --lua-filter=${FILTER} --from=gfm+tex_math_dollars --standalone`
 
@@ -172,7 +170,6 @@ const server = createServer(async (req, res) => {
         math: url.searchParams.get('math') || 'mathml',
         maxwidth: url.searchParams.get('maxwidth') || '60em',
         center_math: url.searchParams.get('center_math') === 'true',
-        kroki_server: url.searchParams.get('kroki_server') || undefined,
       }
 
       const result = await render(content, opts)

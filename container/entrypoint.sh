@@ -4,9 +4,9 @@ set -e
 # Docker entrypoint for pandia container
 #
 # Usage:
-#   docker run ... yaccob/pandia pandia-serve [OPTIONS] [PORT]   → start server
-#   docker run ... yaccob/pandia --serve [PORT]                  → start server (compat)
-#   docker run ... yaccob/pandia [OPTIONS] <input.md>            → render file
+#   docker run ... yaccob/pandia pandia-serve [PORT]   → start server
+#   docker run ... yaccob/pandia --serve [PORT]         → start server (compat)
+#   docker run ... yaccob/pandia [OPTIONS] <input.md>   → render file
 
 FILTER="/usr/local/share/pandoc/filters/diagram-filter.lua"
 PANDOC_COMMON="--lua-filter=$FILTER --from=gfm+tex_math_dollars"
@@ -28,16 +28,11 @@ Render options:
   -o, --output FILE     Write output to FILE (default: stdout)
   --maxwidth WIDTH      Max content width for HTML output (default: 60em)
   --center-math         Center block formulas (default: left-aligned)
-  --kroki-server URL    Enable Kroki for additional diagram types
   -h, --help            Show this help
 
-Server options (pandia-serve):
-  --kroki-server URL    Kroki server for all requests
-  PORT                  Port to listen on (default: 3300)
-
-Diagram types: plantuml, graphviz/dot, mermaid, markmap, ditaa, tikz,
+Diagram types: plantuml, graphviz/dot, mermaid, markmap, tikz,
   nomnoml, dbml, d2, wavedrom, dir
-With Kroki: + bpmn, erd, pikchr, svgbob, excalidraw, vega, ...
+LaTeX math: $...$ (inline) and $$...$$ (block)
 EOF
   exit 0
 }
@@ -46,7 +41,6 @@ FORMAT=""
 OUTPUT_FILE=""
 MAXWIDTH="60em"
 CENTER_MATH=false
-KROKI_URL=""
 INPUT=""
 
 while [ $# -gt 0 ]; do
@@ -65,7 +59,6 @@ while [ $# -gt 0 ]; do
     -o|--output)    OUTPUT_FILE="$2"; shift 2 ;;
     --maxwidth)     MAXWIDTH="$2"; shift 2 ;;
     --center-math)  CENTER_MATH=true; shift ;;
-    --kroki-server) KROKI_URL="$2"; shift 2 ;;
     -h|--help)      usage ;;
     -*)             echo "Unknown option: $1" >&2; exit 1 ;;
     *)              INPUT="$1"; shift ;;
@@ -85,10 +78,6 @@ fi
 
 if [ -z "$FORMAT" ]; then
   FORMAT=html
-fi
-
-if [ -n "$KROKI_URL" ]; then
-  export PANDIA_KROKI_URL="$KROKI_URL"
 fi
 
 # Start mermaid render server if available
