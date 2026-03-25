@@ -92,8 +92,8 @@ async function startServer (port) {
   throw new Error('Server did not start within 30s')
 }
 
-// --- Test cases ---
-const MARKMAP_MD = `# Test
+// --- Test data ---
+const MARKMAP_SMALL = `# Test
 
 \`\`\`markmap
 # Software Architecture
@@ -108,12 +108,54 @@ const MARKMAP_MD = `# Test
 After markmap.
 `
 
+const MARKMAP_LARGE = `# Test
+
+\`\`\`markmap
+# Software Architecture
+## Frontend
+### Framework
+#### React
+#### Vue.js
+#### Angular
+### Build Tools
+#### Vite
+#### Webpack
+### Testing
+#### Jest
+#### Cypress
+## Backend
+### Languages
+#### TypeScript / Node.js
+#### Python
+#### Go
+### Databases
+#### PostgreSQL
+#### Redis
+#### MongoDB
+### API
+#### REST
+#### GraphQL
+## Infrastructure
+### Containers
+#### Docker
+#### Kubernetes
+### CI/CD
+#### GitHub Actions
+#### GitLab CI
+### Monitoring
+#### Prometheus
+#### Grafana
+\`\`\`
+
+After markmap.
+`
+
 let failures = 0
 
-async function testMarkmapRendered (serverUrl) {
-  const testName = 'markmap-rendered-successfully'
+async function testMarkmapRendered (serverUrl, markdown, label) {
+  const testName = `markmap-rendered-${label}`
 
-  const res = await httpPost(`${serverUrl}/render?math=mathml`, MARKMAP_MD)
+  const res = await httpPost(`${serverUrl}/render?math=mathml`, markdown)
   if (res.status !== 200) {
     console.log(`FAIL ${testName}: server returned ${res.status}`)
     failures++
@@ -146,8 +188,8 @@ async function testMarkmapRendered (serverUrl) {
   return html
 }
 
-async function testMarkmapHeight (serverUrl, html) {
-  const testName = 'markmap-no-excessive-whitespace'
+async function testMarkmapHeight (serverUrl, html, label) {
+  const testName = `markmap-no-excessive-whitespace-${label}`
 
   if (!html) {
     console.log(`SKIP ${testName}: no HTML from previous test`)
@@ -155,36 +197,102 @@ async function testMarkmapHeight (serverUrl, html) {
   }
 
   const puppeteer = await loadPuppeteer()
+  const dpr = 2
   const browser = await puppeteer.default.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   })
   const page = await browser.newPage()
-  await page.setViewport({ width: 1200, height: 800 })
+  await page.setViewport({ width: 1400, height: 8000, deviceScaleFactor: dpr })
 
   await page.goto('data:text/html;charset=utf-8,' + encodeURIComponent(html), {
     waitUntil: 'networkidle0',
-    timeout: 20000,
+    timeout: 30000,
   })
-  await new Promise(r => setTimeout(r, 3000))
+  await new Promise(r => setTimeout(r, 5000))
 
-  const result = await page.evaluate(() => {
-    const container = document.querySelector('.markmap-container')
-    const svg = container ? container.querySelector('svg') : null
-    if (!container || !svg) return { error: 'markmap container or SVG not found' }
+  // Take a screenshot of the markmap container and scan pixel rows to find
+  // where visible content starts and ends — this is what a human perceives.
+  const clip = await page.evaluate(() => {
+    const c = document.querySelector('.markmap-container')
+    if (!c) return null
+    const r = c.getBoundingClientRect()
+    return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }
+  })
 
-    const g = svg.querySelector('g')
-    if (!g) return { error: 'SVG has no content (no <g> element)' }
+  if (!clip) {
+    console.log(`FAIL ${testName}: markmap container not found`)
+    failures++
+    await browser.close()
+    return
+  }
 
-    const containerRect = container.getBoundingClientRect()
-    const contentBBox = g.getBBox()
+  // Screenshot returns a PNG buffer; decode it via page canvas to scan pixels
+  const screenshotBase64 = await page.screenshot({ clip, encoding: 'base64' })
 
-    return {
-      containerH: Math.round(containerRect.height),
-      contentH: Math.round(contentBBox.height),
-      ratio: (containerRect.height / contentBBox.height).toFixed(2),
+  const result = await page.evaluate(async (imgData, containerH, dpr) => {
+    // Load screenshot into an Image, draw onto canvas, scan rows
+    const img = new Image()
+    await new Promise((resolve, reject) => {
+      img.onload = resolve
+      img.onerror = reject
+      img.src = 'data:image/png;base64,' + imgData
+    })
+    const canvas = document.createElement('canvas')
+    canvas.width = img.width
+    canvas.height = img.height
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+
+    // Count non-white pixels per row to build a content density histogram.
+    // Then find the smallest contiguous window containing 80% of all content
+    // pixels — this matches human perception (ignores sparse connector lines
+    // at the edges, focuses on where the dense text labels are).
+    const colorThreshold = 30
+    const rowCounts = []
+    let totalContent = 0
+
+    for (let y = 0; y < canvas.height; y++) {
+      let count = 0
+      for (let x = 0; x < canvas.width; x++) {
+        const i = (y * canvas.width + x) * 4
+        const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2]
+        if ((255 - r) + (255 - g) + (255 - b) > colorThreshold) count++
+      }
+      rowCounts.push(count)
+      totalContent += count
     }
-  })
+
+    if (totalContent === 0) return { error: 'no visible content pixels found' }
+
+    // Sliding window: smallest span containing 80% of content pixels
+    const target = totalContent * 0.80
+    let bestStart = 0, bestEnd = canvas.height - 1, bestSpan = canvas.height
+    let windowSum = 0, start = 0
+    for (let end = 0; end < canvas.height; end++) {
+      windowSum += rowCounts[end]
+      while (windowSum >= target && start <= end) {
+        const span = end - start + 1
+        if (span < bestSpan) {
+          bestSpan = span
+          bestStart = start
+          bestEnd = end
+        }
+        windowSum -= rowCounts[start]
+        start++
+      }
+    }
+
+    const visibleContentH = Math.round(bestSpan / dpr)
+    return {
+      containerH,
+      visibleContentH,
+      whiteAbove: Math.round(bestStart / dpr),
+      whiteBelow: Math.round((canvas.height - bestEnd - 1) / dpr),
+      ratio: (containerH / visibleContentH).toFixed(2),
+    }
+  }, screenshotBase64, clip.height, dpr)
 
   await browser.close()
 
@@ -194,12 +302,12 @@ async function testMarkmapHeight (serverUrl, html) {
     return
   }
 
-  const maxRatio = 1.5
+  const maxRatio = 1.3
   if (parseFloat(result.ratio) > maxRatio) {
-    console.log(`FAIL ${testName}: container ${result.containerH}px is ${result.ratio}x the content height ${result.contentH}px (max ${maxRatio}x)`)
+    console.log(`FAIL ${testName}: container ${result.containerH}px but visible content only ${result.visibleContentH}px (ratio ${result.ratio}x, white above: ${result.whiteAbove}px, below: ${result.whiteBelow}px, max ratio: ${maxRatio}x)`)
     failures++
   } else {
-    console.log(`ok   ${testName}: container ${result.containerH}px, content ${result.contentH}px, ratio ${result.ratio}`)
+    console.log(`ok   ${testName}: container ${result.containerH}px, visible content ${result.visibleContentH}px, ratio ${result.ratio}`)
   }
 }
 
@@ -221,8 +329,11 @@ if (externalUrl) {
 }
 
 try {
-  const html = await testMarkmapRendered(serverUrl)
-  await testMarkmapHeight(serverUrl, html)
+  const htmlSmall = await testMarkmapRendered(serverUrl, MARKMAP_SMALL, 'small')
+  await testMarkmapHeight(serverUrl, htmlSmall, 'small')
+
+  const htmlLarge = await testMarkmapRendered(serverUrl, MARKMAP_LARGE, 'large')
+  await testMarkmapHeight(serverUrl, htmlLarge, 'large')
 } finally {
   if (server) server.kill()
 }
